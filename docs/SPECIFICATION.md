@@ -38,9 +38,45 @@
 5. Explicit State (明示的状態)
    - 全状態は DB に永続化
    - ロック機構で競合防止
+
+6. In-Page CRUD (ページ内CRUD)
+   - Livewire では CRUD 操作はページ内で完結
+   - Create/Edit はモーダルやスライドオーバーで実装
+   - 別ページや別 Action Spec は不要
+   - Spec はページのセクションとして定義
 ```
 
-### 1.3 なぜ 3 層か
+### 1.3 Livewire UI パターン
+
+```
+インタラクティブ UI (Livewire) では:
+
+正しいパターン:
+┌─────────────────────────────────────────────────┐
+│ Page: User Management (/users)                  │
+│ ├── Section: header                             │
+│ ├── Section: filters                            │
+│ ├── Section: table                              │
+│ ├── Section: create_modal  ← ページ内モーダル    │
+│ ├── Section: edit_modal    ← ページ内モーダル    │
+│ └── Section: delete_confirm                     │
+└─────────────────────────────────────────────────┘
+
+誤ったパターン:
+┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
+│ Page: List      │ │ Page: Create    │ │ Page: Edit      │
+│ /users          │ │ /users/create   │ │ /users/{id}/edit│
+└─────────────────┘ └─────────────────┘ └─────────────────┘
+        ↑ 別ページは不要 (モーダルで十分)
+
+Action Spec が必要なケース:
+- 非同期ジョブ (SendWelcomeEmail, ProcessImport)
+- スケジュールタスク (CleanupSessions)
+- 複数ページで使うロジック
+- 複雑なワークフロー
+```
+
+### 1.4 なぜ 3 層か
 
 ```
 2層の場合 (Hub + Coder):

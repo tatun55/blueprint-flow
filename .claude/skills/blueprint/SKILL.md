@@ -62,6 +62,65 @@ The `core/overview` spec MUST include:
 
 ---
 
+## Spec Design Principles
+
+### Livewire UI Pattern (CRITICAL)
+
+For interactive UIs like Livewire, **CRUD operations happen within the page**, not as separate pages or actions.
+
+<principle name="in_page_crud">
+  <rule>CRUD operations are defined as **page sections**, not separate specs</rule>
+  <rule>Create/Edit forms appear as **modals or slide-overs** within the list page</rule>
+  <rule>Delete uses **confirmation dialog** within the page</rule>
+  <rule>Only define **separate pages** when truly needed (e.g., complex detail view)</rule>
+</principle>
+
+**Correct Pattern:**
+```
+Page: User Management (/users)
+├── Section: header (title + "Add User" button)
+├── Section: filters (search, status filter)
+├── Section: table (user list with edit/delete actions)
+├── Section: create_modal (form for new user)
+├── Section: edit_modal (form for editing user)
+└── Section: delete_confirm (confirmation dialog)
+```
+
+**Incorrect Pattern:**
+```
+Page: User List (/users)
+Page: User Create (/users/create)    ← Don't need separate page
+Page: User Edit (/users/{id}/edit)   ← Don't need separate page
+Action: CreateUser                    ← Don't need separate action spec
+Action: UpdateUser                    ← Don't need separate action spec
+```
+
+### When to Use Separate Action Specs
+
+Only create `action/*` specs for:
+
+| Use Case | Example |
+|----------|---------|
+| **Async jobs** | SendWelcomeEmail, ProcessImport |
+| **Scheduled tasks** | CleanupExpiredSessions, SendDailyReport |
+| **Cross-page logic** | Business logic used by multiple pages |
+| **Complex workflows** | Multi-step processes with events |
+
+### Page Section Types
+
+| Type | Description | Example |
+|------|-------------|---------|
+| `header` | Page title, primary action button | "Users" + "Add User" button |
+| `filters` | Search, filter controls | Search by name, filter by status |
+| `data-table` | List with columns and row actions | User list with edit/delete |
+| `create-modal` | Modal form for creating | New user form |
+| `edit-modal` | Modal form for editing | Edit user form |
+| `delete-confirm` | Delete confirmation dialog | "Are you sure?" |
+| `detail-panel` | Slide-over or panel for details | User details |
+| `form` | Standalone form (non-modal) | Settings form |
+
+---
+
 ## Quality Validation System
 
 <quality_check name="spec_validation">
@@ -389,6 +448,8 @@ cat .blueprint-language 2>/dev/null || echo "ja"
 ### Define Page
 
 <workflow name="define_page">
+  <note>For Livewire: CRUD operations are sections within the page, not separate pages</note>
+
   <required_content>
     ```markdown
     # Page: {page_name}
@@ -407,28 +468,44 @@ cat .blueprint-language 2>/dev/null || echo "ja"
     | Section | Type | Description |
     |---------|------|-------------|
     | header | header | Page title with "Add User" button |
-    | filters | form | Search by name, filter by status |
-    | table | data-table | Columns: name, email, status, actions |
+    | filters | filters | Search by name, filter by status dropdown |
+    | table | data-table | Columns: name, email, status, created_at, actions (edit/delete) |
+    | create_modal | create-modal | Modal with form: name, email, role |
+    | edit_modal | edit-modal | Modal with form: name, email, role, status |
+    | delete_confirm | delete-confirm | Confirmation: "Delete {name}?" with cancel/confirm |
 
-    ## Actions
-    | Action | Trigger | Behavior |
-    |--------|---------|----------|
-    | create | click button | Open modal with form |
-    | edit | click row | Navigate to /users/{id}/edit |
-    | delete | click icon | Confirm dialog, then delete |
+    ## Section Details
+
+    ### create_modal
+    | Field | Type | Validation |
+    |-------|------|------------|
+    | name | text | required, max:255 |
+    | email | email | required, unique:users |
+    | role | select | required, options: admin/user |
+
+    ### edit_modal
+    | Field | Type | Validation |
+    |-------|------|------------|
+    | name | text | required, max:255 |
+    | email | email | required, unique:users,{id} |
+    | role | select | required |
+    | status | select | required, options: active/inactive |
 
     ## Data
     - Source: User model
     - Pagination: 20 per page
     - Default sort: created_at desc
+    - Searchable: name, email
+    - Filterable: status, role
     ```
   </required_content>
 
   <quality_checks>
     <check>Route is fully specified</check>
-    <check>All sections have clear description</check>
-    <check>Actions have complete behavior</check>
-    <check>Data source and pagination defined</check>
+    <check>All sections including modals are defined</check>
+    <check>Modal forms have field definitions with validation</check>
+    <check>Data source, pagination, and filters defined</check>
+    <check>No separate create/edit pages (use modals instead)</check>
   </quality_checks>
 </workflow>
 
@@ -437,42 +514,65 @@ cat .blueprint-language 2>/dev/null || echo "ja"
 ### Define Action
 
 <workflow name="define_action">
+  <note>Only for async jobs, scheduled tasks, or cross-page business logic. NOT for page CRUD.</note>
+
+  <when_to_use>
+    - Async jobs: SendWelcomeEmail, ProcessImport
+    - Scheduled tasks: CleanupExpiredSessions
+    - Cross-page logic: CalculateUserStats (used by dashboard and profile)
+    - Complex workflows: OrderCheckout (multi-step with events)
+  </when_to_use>
+
+  <when_not_to_use>
+    - CreateUser, UpdateUser, DeleteUser → Define as page sections
+    - Simple form submissions → Handle in page component
+  </when_not_to_use>
+
   <required_content>
     ```markdown
     # Action: {action_name}
 
+    ## Type
+    - async | scheduled | sync
+
     ## Purpose
-    {Clear description of what this action does}
+    {Clear description - why this needs to be a separate action}
+
+    ## Trigger
+    - Event: UserCreated
+    - Schedule: daily at 3:00 AM
+    - Called from: Dashboard, UserProfile
 
     ## Input
     | Parameter | Type | Required | Validation |
     |-----------|------|----------|------------|
-    | name | string | yes | max:255 |
-    | email | string | yes | email, unique:users |
+    | user_id | int | yes | exists:users |
 
     ## Process
-    1. Validate input
-    2. Create user record
-    3. Send welcome email
-    4. Dispatch UserCreated event
+    1. Load user data
+    2. Generate report
+    3. Send via email
+    4. Log completion
 
     ## Output
-    - Success: User model instance
-    - Failure: ValidationException
+    - Success: { sent: true, email: "..." }
+    - Failure: NotificationException
 
     ## Events
-    - UserCreated: dispatched after creation
+    - ReportSent: dispatched after sending
 
-    ## Side Effects
-    - Sends welcome email via queue
+    ## Queue
+    - Queue: emails
+    - Retry: 3 times
+    - Timeout: 60 seconds
     ```
   </required_content>
 
   <quality_checks>
-    <check>Input parameters fully typed</check>
-    <check>Process steps are clear</check>
-    <check>Output and errors defined</check>
-    <check>Side effects documented</check>
+    <check>Type (async/scheduled/sync) is specified</check>
+    <check>Trigger is clearly defined</check>
+    <check>Justification why separate action is needed</check>
+    <check>Queue settings for async jobs</check>
   </quality_checks>
 </workflow>
 
