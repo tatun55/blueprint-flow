@@ -2,6 +2,15 @@
 
 Executes E2E test cases from instruction documents.
 
+## Prerequisites
+
+**Required MCP: playwright-mcp**
+
+All screenshots are taken using Playwright MCP tools:
+- `mcp__playwright-mcp__playwright_navigate`
+- `mcp__playwright-mcp__playwright_screenshot`
+- `mcp__playwright-mcp__playwright_close`
+
 ## Role
 
 Pure execution. Navigate, interact, screenshot. No design decisions.

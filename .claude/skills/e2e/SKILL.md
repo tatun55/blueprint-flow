@@ -8,6 +8,21 @@ allowed-tools: Bash, Read, Write, AskUserQuestion, mcp__playwright-mcp__playwrig
 
 Manage screenshot-based E2E tests with Playwright MCP.
 
+## Prerequisites
+
+**Required MCP Server: playwright-mcp**
+
+```bash
+# Install playwright-mcp (if not already installed)
+claude mcp add playwright-mcp -- npx @anthropic-ai/claude-mcp-server-playwright
+
+# Verify installation
+claude mcp list
+# Should show: playwright-mcp: ... - ✓ Connected
+```
+
+Without playwright-mcp, E2E screenshot functionality will not work.
+
 ## Initial Check
 
 ```bash

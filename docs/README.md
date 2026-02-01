@@ -145,9 +145,44 @@ blueprint-flow/
     └── README.md            # This file
 ```
 
+## Requirements
+
+### Required MCP Servers
+
+| MCP Server | Purpose | Install Command |
+|------------|---------|-----------------|
+| `playwright-mcp` | E2E screenshots | `claude mcp add playwright-mcp -- npx @executeautomation/playwright-mcp-server` |
+
+```bash
+# Verify MCP servers
+claude mcp list
+# Should show: playwright-mcp: ... - ✓ Connected
+```
+
+### Node.js
+
+Node.js 20.19+ or 22.12+ (required for Vite)
+
+```bash
+node -v  # Check version
+nvm install 22 && nvm use 22  # Upgrade if needed
+```
+
 ## Installation
 
-### As Git Submodule (Recommended)
+### Quick Start (New Project)
+
+```bash
+# Setup bpf CLI (one-time)
+git clone https://github.com/tatun55/blueprint-flow ~/.blueprint-flow
+cp ~/.blueprint-flow/bpf ~/bin/bpf
+chmod +x ~/bin/bpf
+
+# Create new project
+bpf create-project my-app
+```
+
+### As Git Submodule (Existing Project)
 
 ```bash
 # Add to your project
