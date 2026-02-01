@@ -171,43 +171,55 @@ Task = {
 
 ### 2.3 Status (状態)
 
-**状態遷移図**:
+<state_machine name="spec_status">
+  <state name="draft" type="initial">
+    <description>作成中</description>
+    <transition to="pending_review" trigger="human_submits"/>
+  </state>
 
-```
-                    ┌────────────────┐
-                    │     draft      │
-                    └───────┬────────┘
-                            │ human submits
-                            ▼
-                    ┌────────────────┐
-                    │ pending_review │◄──────────────┐
-                    └───────┬────────┘               │
-                            │ human approves         │
-                            ▼                        │
-                    ┌────────────────┐               │
-                    │    approved    │               │
-                    └───────┬────────┘               │
-                            │ hub locks              │
-                            ▼                        │
-                    ┌────────────────┐               │
-                    │  in_progress   │               │
-                    └───────┬────────┘               │
-                            │ coder completes        │
-                            ▼                        │
-                    ┌────────────────┐               │
-              ┌─────│  impl_review   │─────┐         │
-              │     └────────────────┘     │         │
-              │ human approves             │ human rejects
-              ▼                            ▼         │
-      ┌────────────────┐           ┌────────────────┐│
-      │    testing     │           │ needs_revision ├┘
-      └───────┬────────┘           └────────────────┘
-              │ e2e passes
-              ▼
-      ┌────────────────┐
-      │      done      │
-      └────────────────┘
-```
+  <state name="pending_review">
+    <description>人間レビュー待ち</description>
+    <transition to="approved" trigger="human_approves"/>
+    <transition to="needs_revision" trigger="human_requests_changes"/>
+  </state>
+
+  <state name="approved">
+    <description>承認済み、実装待ち</description>
+    <transition to="in_progress" trigger="hub_locks"/>
+  </state>
+
+  <state name="in_progress">
+    <description>実装中（ロック）</description>
+    <transition to="impl_review" trigger="coder_completes"/>
+    <transition to="blocked" trigger="coder_blocked"/>
+  </state>
+
+  <state name="impl_review">
+    <description>実装レビュー待ち</description>
+    <transition to="testing" trigger="human_approves"/>
+    <transition to="needs_revision" trigger="human_requests_changes"/>
+  </state>
+
+  <state name="testing">
+    <description>E2Eテスト中</description>
+    <transition to="done" trigger="tests_pass"/>
+    <transition to="needs_revision" trigger="tests_fail"/>
+  </state>
+
+  <state name="needs_revision" type="recovery">
+    <description>修正必要</description>
+    <transition to="pending_review" trigger="spec_updated"/>
+  </state>
+
+  <state name="blocked" type="recovery">
+    <description>依存関係待ち</description>
+    <transition to="approved" trigger="dependency_resolved"/>
+  </state>
+
+  <state name="done" type="terminal">
+    <description>完了</description>
+  </state>
+</state_machine>
 
 **状態定義**:
 
@@ -228,132 +240,203 @@ Task = {
 
 ### 3.1 Spec 作成フロー
 
-```
-Human                    Blueprint Skill              DB
-  │                           │                        │
-  │ /blueprint                │                        │
-  │ ─────────────────────────►│                        │
-  │                           │                        │
-  │ ◄─────────────────────────│ AskUserQuestion:      │
-  │   "What type?"            │   type selection       │
-  │                           │                        │
-  │ "Database Table"          │                        │
-  │ ─────────────────────────►│                        │
-  │                           │                        │
-  │ ◄─────────────────────────│ AskUserQuestion:      │
-  │   "Table details?"        │   columns, relations   │
-  │                           │                        │
-  │ {columns: [...]}          │                        │
-  │ ─────────────────────────►│                        │
-  │                           │ blueprint-db-cli.sh add│
-  │                           │ ────────────────────►  │
-  │                           │                        │
-  │                           │ ◄────────────────────  │
-  │                           │   {id: 1}              │
-  │                           │                        │
-  │ ◄─────────────────────────│ "Spec created.        │
-  │   "Submit for review?"    │  Submit for review?"   │
-  │                           │                        │
-```
+<workflow name="spec_creation">
+  <participants>
+    <participant id="human">Human</participant>
+    <participant id="blueprint">Blueprint Skill</participant>
+    <participant id="db">Database</participant>
+  </participants>
+
+  <step id="invoke">
+    <from>human</from>
+    <to>blueprint</to>
+    <action>/blueprint</action>
+  </step>
+
+  <step id="select_type">
+    <from>blueprint</from>
+    <to>human</to>
+    <action>AskUserQuestion: type selection</action>
+  </step>
+
+  <step id="type_response">
+    <from>human</from>
+    <to>blueprint</to>
+    <action>"Database Table"</action>
+  </step>
+
+  <step id="gather_details">
+    <from>blueprint</from>
+    <to>human</to>
+    <action>AskUserQuestion: columns, relations</action>
+  </step>
+
+  <step id="details_response">
+    <from>human</from>
+    <to>blueprint</to>
+    <action>{columns: [...]}</action>
+  </step>
+
+  <step id="save_spec">
+    <from>blueprint</from>
+    <to>db</to>
+    <action>blueprint-db-cli.sh add</action>
+    <output>{id: 1}</output>
+  </step>
+
+  <step id="confirm">
+    <from>blueprint</from>
+    <to>human</to>
+    <action>AskUserQuestion: "Spec created. Submit for review?"</action>
+  </step>
+</workflow>
 
 ### 3.2 実装フロー
 
-```
-Human          Hub              Instructor           Coder              DB
-  │             │                    │                  │                │
-  │ /hub        │                    │                  │                │
-  │ ───────────►│                    │                  │                │
-  │             │ available          │                  │                │
-  │             │ ─────────────────────────────────────────────────────► │
-  │             │ ◄───────────────────────────────────────────────────── │
-  │             │   [{id:1, cat:'data', type:'tables'}]                  │
-  │             │                    │                  │                │
-  │             │ lock(1, db-instructor)                │                │
-  │             │ ─────────────────────────────────────────────────────► │
-  │             │                    │                  │                │
-  │             │ Task(db-instructor)│                  │                │
-  │             │ ──────────────────►│                  │                │
-  │             │                    │                  │                │
-  │             │                    │ (patterns embedded) │             │
-  │             │                    │ Read spec data   │                │
-  │             │                    │                  │                │
-  │             │                    │ task-add         │                │
-  │             │                    │ ─────────────────────────────────►│
-  │             │                    │                  │                │
-  │             │ ◄──────────────────│ task_id: 1       │                │
-  │             │                    │                  │                │
-  │             │ Task(db-coder)     │                  │                │
-  │             │ ────────────────────────────────────► │                │
-  │             │                    │                  │                │
-  │             │                    │                  │ task-get(1)    │
-  │             │                    │                  │ ──────────────►│
-  │             │                    │                  │ ◄──────────────│
-  │             │                    │                  │                │
-  │             │                    │                  │ Write files    │
-  │             │                    │                  │                │
-  │             │                    │                  │ task-status    │
-  │             │                    │                  │ completed      │
-  │             │                    │                  │ ──────────────►│
-  │             │ ◄────────────────────────────────────│                │
-  │             │   {status: complete, files: [...]}   │                │
-  │             │                    │                  │                │
-  │             │ status(1, impl_review)               │                │
-  │             │ ─────────────────────────────────────────────────────► │
-  │             │                    │                  │                │
-  │ ◄───────────│ AskUserQuestion:  │                  │                │
-  │ "Review?"   │ "Implementation   │                  │                │
-  │             │  complete. Review?"│                  │                │
-```
+<workflow name="implementation">
+  <participants>
+    <participant id="human">Human</participant>
+    <participant id="hub">Hub</participant>
+    <participant id="instructor">Instructor</participant>
+    <participant id="coder">Coder</participant>
+    <participant id="db">Database</participant>
+  </participants>
+
+  <step id="invoke">
+    <from>human</from>
+    <to>hub</to>
+    <action>/hub</action>
+  </step>
+
+  <step id="get_available">
+    <from>hub</from>
+    <to>db</to>
+    <action>available-with-deps</action>
+    <output>[{id:1, cat:'data', type:'tables'}]</output>
+  </step>
+
+  <step id="lock_spec">
+    <from>hub</from>
+    <to>db</to>
+    <action>lock(1, db-instructor)</action>
+  </step>
+
+  <step id="dispatch_instructor">
+    <from>hub</from>
+    <to>instructor</to>
+    <action>Task(db-instructor)</action>
+  </step>
+
+  <step id="instructor_process">
+    <agent>instructor</agent>
+    <actions>
+      <action>Read spec data (patterns embedded)</action>
+      <action>Generate task content</action>
+    </actions>
+  </step>
+
+  <step id="save_task">
+    <from>instructor</from>
+    <to>db</to>
+    <action>task-add</action>
+    <output>task_id: 1</output>
+  </step>
+
+  <step id="dispatch_coder">
+    <from>hub</from>
+    <to>coder</to>
+    <action>Task(db-coder)</action>
+  </step>
+
+  <step id="coder_process">
+    <agent>coder</agent>
+    <actions>
+      <action>task-get(task_id)</action>
+      <action>Create worktree</action>
+      <action>Write files</action>
+      <action>Commit and push</action>
+      <action>Create draft PR</action>
+      <action>task-status completed</action>
+    </actions>
+    <output>{status: complete, pr_url: "...", files: [...]}</output>
+  </step>
+
+  <step id="update_status">
+    <from>hub</from>
+    <to>db</to>
+    <action>status(1, impl_review)</action>
+  </step>
+
+  <step id="request_review">
+    <from>hub</from>
+    <to>human</to>
+    <action>AskUserQuestion: "Implementation complete. Review PR?"</action>
+  </step>
+</workflow>
 
 ### 3.3 E2E テストフロー
 
-```
-Human          Hub           Test Instructor       Test Coder         e2e.db
-  │             │                   │                   │                │
-  │ /hub        │                   │                   │                │
-  │ (e2e)       │                   │                   │                │
-  │ ───────────►│                   │                   │                │
-  │             │ e2e-pending       │                   │                │
-  │             │ ───────────────────────────────────────────────────────►
-  │             │ ◄─────────────────────────────────────────────────────│
-  │             │  [{id:1, slug:'user_list', e2e_level:1}]              │
-  │             │                   │                   │                │
-  │             │ Task(test-instructor)                 │                │
-  │             │ ─────────────────►│                   │                │
-  │             │                   │                   │                │
-  │             │                   │ Generate test cases                │
-  │             │                   │ for level 1                        │
-  │             │                   │                   │                │
-  │             │                   │ task-add (test)   │                │
-  │             │                   │ ──────────────────────────────────►
-  │             │                   │                   │                │
-  │             │ Task(test-coder)  │                   │                │
-  │             │ ─────────────────────────────────────►│                │
-  │             │                   │                   │                │
-  │             │                   │                   │ add test case  │
-  │             │                   │                   │ ──────────────►│
-  │             │                   │                   │                │
-  │             │                   │                   │ run            │
-  │             │                   │                   │ ──────────────►│
-  │             │                   │                   │ {run_id: 1}    │
-  │             │                   │                   │                │
-  │             │                   │                   │ playwright     │
-  │             │                   │                   │ navigate       │
-  │             │                   │                   │ screenshot     │
-  │             │                   │                   │                │
-  │             │                   │                   │ screenshot     │
-  │             │                   │                   │ ──────────────►│
-  │             │                   │                   │                │
-  │             │                   │                   │ result passed  │
-  │             │                   │                   │ ──────────────►│
-  │             │                   │                   │                │
-  │             │ ◄─────────────────────────────────────│                │
-  │             │   {passed: 3, failed: 0}              │                │
-  │             │                   │                   │                │
-  │ ◄───────────│ AskUserQuestion:  │                   │                │
-  │ "Review     │ "E2E tests passed.│                   │                │
-  │  screenshots│  Review?"         │                   │                │
-```
+<workflow name="e2e_testing">
+  <participants>
+    <participant id="human">Human</participant>
+    <participant id="hub">Hub</participant>
+    <participant id="test_instructor">Test Instructor</participant>
+    <participant id="test_coder">Test Coder</participant>
+    <participant id="e2e_db">e2e.db</participant>
+  </participants>
+
+  <step id="invoke">
+    <from>human</from>
+    <to>hub</to>
+    <action>/hub (e2e)</action>
+  </step>
+
+  <step id="get_pending">
+    <from>hub</from>
+    <to>e2e_db</to>
+    <action>e2e-pending</action>
+    <output>[{id:1, slug:'user_list', e2e_level:1}]</output>
+  </step>
+
+  <step id="dispatch_instructor">
+    <from>hub</from>
+    <to>test_instructor</to>
+    <action>Task(test-instructor)</action>
+  </step>
+
+  <step id="instructor_process">
+    <agent>test_instructor</agent>
+    <actions>
+      <action>Generate test cases for level 1</action>
+      <action>task-add (test)</action>
+    </actions>
+  </step>
+
+  <step id="dispatch_coder">
+    <from>hub</from>
+    <to>test_coder</to>
+    <action>Task(test-coder)</action>
+  </step>
+
+  <step id="coder_process">
+    <agent>test_coder</agent>
+    <actions>
+      <action>add test case to e2e.db</action>
+      <action>run (get run_id)</action>
+      <action>playwright navigate</action>
+      <action>playwright screenshot</action>
+      <action>record screenshot</action>
+      <action>result passed/failed</action>
+    </actions>
+    <output>{passed: 3, failed: 0}</output>
+  </step>
+
+  <step id="request_review">
+    <from>hub</from>
+    <to>human</to>
+    <action>AskUserQuestion: "E2E tests passed. Review screenshots?"</action>
+  </step>
+</workflow>
 
 ---
 

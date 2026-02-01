@@ -52,31 +52,52 @@ If dependencies exist and are not all `done`:
 
 ## Instruction Template
 
+<task_template name="base" abstract="true">
+  <section name="meta">
+    <field name="type">{task_type}</field>
+    <field name="spec_id">{spec_id}</field>
+    <field name="priority">4</field>
+    <field name="blocked_by">[{dependency_ids}]</field>
+  </section>
+
+  <section name="worktree">
+    <field name="branch">task/spec-{spec_id}</field>
+    <field name="command">./scripts/worktree-manager.sh create {spec_id}</field>
+    <field name="working_dir">.worktrees/spec-{spec_id}</field>
+  </section>
+
+  <section name="completion_flow">
+    <step>All files created and validated</step>
+    <step>In worktree: git add -A && git commit -m "feat(action): add {Name}"</step>
+    <step>Push: git push -u origin task/spec-{spec_id}</step>
+    <step>Create PR: gh pr create --title "feat(action): {name}" --body "Spec ID: {spec_id}" --draft</step>
+    <step>Report: {"status": "complete", "spec_id": {spec_id}, "pr_url": "...", "files": [...]}</step>
+  </section>
+
+  <section name="error_flow">
+    <rule>Do NOT commit partial changes</rule>
+    <error_types>
+      <type name="instruction_unclear">Missing input/output definition</type>
+      <type name="technical_error">PHP syntax issue</type>
+      <type name="dependency_missing">Required model/service not found</type>
+      <type name="file_conflict">File already exists</type>
+    </error_types>
+    <example>{"status": "blocked", "reason": "dependency_missing", "detail": "Model User not found"}</example>
+  </section>
+</task_template>
+
+---
+
 ### For sync actions
 
-```markdown
-# Task: {spec_id}_{slug}
+<task_template name="action_sync" extends="base">
+  <output_files>
+    <file>${ACTION_PATH}/{ActionName}.php</file>
+    <file condition="events_specified">${EVENT_PATH}/{EventName}.php</file>
+  </output_files>
 
-## Meta
-- type: action_sync
-- spec_id: {spec_id}
-- priority: 4
-- blocked_by: [{dependency_ids}]
-
-## Worktree Setup
-- branch: task/spec-{spec_id}
-- command: `./scripts/worktree-manager.sh create {spec_id}`
-- working_dir: `.worktrees/spec-{spec_id}`
-
-## Output Files
-- `${ACTION_PATH}/{ActionName}.php`
-- `${EVENT_PATH}/{EventName}.php` (if events specified)
-
-## Instructions
-
-### File: ${ACTION_PATH}/{ActionName}.php
-
-<template>
+  <file_template path="${ACTION_PATH}/{ActionName}.php">
+    <code lang="php">
 <?php
 
 namespace ${ACTION_NAMESPACE};
@@ -97,20 +118,19 @@ class {ActionName}
         return {return_value};
     }
 }
-</template>
+    </code>
+    <rules>
+      <rule>Single public method: execute()</rule>
+      <rule>Validate input if validation: true in spec</rule>
+      <rule>Dispatch events at end of execute()</rule>
+      <rule>Use dependency injection for services</rule>
+      <rule>Return typed value</rule>
+      <rule>Comments in ${COMMENT_LANGUAGE}</rule>
+    </rules>
+  </file_template>
 
-<rules>
-- Single public method: execute()
-- Validate input if validation: true in spec
-- Dispatch events at end of execute()
-- Use dependency injection for services
-- Return typed value
-- Comments in ${COMMENT_LANGUAGE}
-</rules>
-
-### File: ${EVENT_PATH}/{EventName}.php (for each event)
-
-<template>
+  <file_template path="${EVENT_PATH}/{EventName}.php" for_each="events">
+    <code lang="php">
 <?php
 
 namespace ${EVENT_NAMESPACE};
@@ -126,64 +146,35 @@ class {EventName}
         public readonly {Model} ${model}
     ) {}
 }
-</template>
+    </code>
+    <rules>
+      <rule>Use readonly properties in constructor</rule>
+      <rule>Use SerializesModels for Eloquent models</rule>
+      <rule>Keep events simple (data containers)</rule>
+    </rules>
+  </file_template>
 
-<rules>
-- Use readonly properties in constructor
-- Use SerializesModels for Eloquent models
-- Keep events simple (data containers)
-</rules>
+  <validation>
+    <check>Action class created</check>
+    <check>execute() method has correct signature</check>
+    <check>All input params typed</check>
+    <check>Return type specified</check>
+    <check>Events created and dispatched</check>
+    <check>Validation logic if specified</check>
+  </validation>
+</task_template>
 
-## Validation
-- [ ] Action class created
-- [ ] execute() method has correct signature
-- [ ] All input params typed
-- [ ] Return type specified
-- [ ] Events created and dispatched
-- [ ] Validation logic if specified
-
-## Completion Flow
-1. All files created and validated
-2. In worktree: `git add -A && git commit -m "feat(action): add {ActionName}"`
-3. Push: `git push -u origin task/spec-{spec_id}`
-4. Create PR: `gh pr create --title "feat(action): {name}" --body "Spec ID: {spec_id}" --draft`
-5. Report: `{"status": "complete", "spec_id": {spec_id}, "pr_url": "...", "files": [...]}`
-
-## Error Flow
-If blocked or error occurs:
-1. Do NOT commit partial changes
-2. Report with details:
-   - `instruction_unclear`: Missing input/output definition
-   - `technical_error`: PHP syntax issue
-   - `dependency_missing`: Required model/service not found
-   - `file_conflict`: File already exists
-3. Example: `{"status": "blocked", "reason": "dependency_missing", "detail": "Model User not found"}`
-```
+---
 
 ### For async actions (Jobs)
 
-```markdown
-# Task: {spec_id}_{slug}
+<task_template name="action_async" extends="base">
+  <output_files>
+    <file>${JOB_PATH}/{JobName}.php</file>
+  </output_files>
 
-## Meta
-- type: action_async
-- spec_id: {spec_id}
-- priority: 4
-- blocked_by: [{dependency_ids}]
-
-## Worktree Setup
-- branch: task/spec-{spec_id}
-- command: `./scripts/worktree-manager.sh create {spec_id}`
-- working_dir: `.worktrees/spec-{spec_id}`
-
-## Output Files
-- `${JOB_PATH}/{JobName}.php`
-
-## Instructions
-
-### File: ${JOB_PATH}/{JobName}.php
-
-<template>
+  <file_template path="${JOB_PATH}/{JobName}.php">
+    <code lang="php">
 <?php
 
 namespace ${JOB_NAMESPACE};
@@ -212,59 +203,39 @@ class {JobName} implements ShouldQueue
         {failure_handling}
     }
 }
-</template>
+    </code>
+    <rules>
+      <rule>Implement ShouldQueue</rule>
+      <rule>Use readonly properties for immutable data</rule>
+      <rule>Handle failures gracefully</rule>
+      <rule>Log important steps</rule>
+    </rules>
+  </file_template>
 
-<rules>
-- Implement ShouldQueue
-- Use readonly properties for immutable data
-- Handle failures gracefully
-- Log important steps
-</rules>
+  <validation>
+    <check>Job implements ShouldQueue</check>
+    <check>Constructor accepts required data</check>
+    <check>handle() contains business logic</check>
+    <check>failed() handles errors</check>
+  </validation>
+</task_template>
 
-## Validation
-- [ ] Job implements ShouldQueue
-- [ ] Constructor accepts required data
-- [ ] handle() contains business logic
-- [ ] failed() handles errors
-
-## Completion Flow
-Same as sync actions - commit, push, create draft PR, report complete.
-
-## Error Flow
-Same as sync actions - report with reason and detail.
-```
+---
 
 ### For scheduled actions
 
-```markdown
-# Task: {spec_id}_{slug}
+<task_template name="action_scheduled" extends="base">
+  <output_files>
+    <file>${COMMAND_PATH}/{CommandName}.php</file>
+  </output_files>
 
-## Meta
-- type: action_scheduled
-- spec_id: {spec_id}
-- priority: 4
-- blocked_by: [{dependency_ids}]
+  <schedule_registration>
+    <file>${SCHEDULE_FILE}</file>
+    <code>Schedule::command('{command_name}')->{schedule_frequency}();</code>
+  </schedule_registration>
 
-## Worktree Setup
-- branch: task/spec-{spec_id}
-- command: `./scripts/worktree-manager.sh create {spec_id}`
-- working_dir: `.worktrees/spec-{spec_id}`
-
-## Output Files
-- `${COMMAND_PATH}/{CommandName}.php`
-
-## Schedule Registration
-
-Add to `${SCHEDULE_FILE}`:
-```php
-Schedule::command('{command_name}')->{schedule_frequency}();
-```
-
-## Instructions
-
-### File: ${COMMAND_PATH}/{CommandName}.php
-
-<template>
+  <file_template path="${COMMAND_PATH}/{CommandName}.php">
+    <code lang="php">
 <?php
 
 namespace ${COMMAND_NAMESPACE};
@@ -283,26 +254,21 @@ class {CommandName} extends Command
         return Command::SUCCESS;
     }
 }
-</template>
+    </code>
+    <rules>
+      <rule>Return Command::SUCCESS or Command::FAILURE</rule>
+      <rule>Use $this->info() for output</rule>
+      <rule>Log execution for monitoring</rule>
+    </rules>
+  </file_template>
 
-<rules>
-- Return Command::SUCCESS or Command::FAILURE
-- Use $this->info() for output
-- Log execution for monitoring
-</rules>
-
-## Validation
-- [ ] Command created with correct signature
-- [ ] Description set
-- [ ] handle() returns proper exit code
-- [ ] Schedule registered
-
-## Completion Flow
-Same as sync actions - commit, push, create draft PR, report complete.
-
-## Error Flow
-Same as sync actions - report with reason and detail.
-```
+  <validation>
+    <check>Command created with correct signature</check>
+    <check>Description set</check>
+    <check>handle() returns proper exit code</check>
+    <check>Schedule registered</check>
+  </validation>
+</task_template>
 
 ## Type Mapping
 

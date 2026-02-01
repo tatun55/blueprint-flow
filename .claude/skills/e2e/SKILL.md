@@ -178,19 +178,68 @@ After confirming a screenshot is correct:
 
 ## Batch Testing Flow
 
-For running multiple tests:
+<workflow name="batch_testing">
+  <step id="get_tests">
+    <bash>./scripts/e2e-db-cli.sh list</bash>
+    <output>test_cases[]</output>
+  </step>
 
-<flow>
-  <step>Get active test cases: `./scripts/e2e-db-cli.sh list`</step>
-  <step>For each test case:</step>
-  <step>  - Create run record</step>
-  <step>  - Navigate to URL</step>
-  <step>  - Take screenshot</step>
-  <step>  - Compare with baseline (if exists)</step>
-  <step>  - Record result</step>
-  <step>Close browser</step>
-  <step>Show summary</step>
-</flow>
+  <loop for_each="test_cases" item="test">
+    <step id="create_run">
+      <bash>./scripts/e2e-db-cli.sh run {test.slug}</bash>
+      <output>run_id, case_id</output>
+    </step>
+
+    <step id="navigate">
+      <playwright tool="navigate">
+        <url>{test.url}</url>
+        <headless>true</headless>
+      </playwright>
+    </step>
+
+    <step id="screenshot">
+      <playwright tool="screenshot">
+        <name>{run_id}_{test.slug}</name>
+        <savePng>true</savePng>
+        <width>{test.viewport_width}</width>
+        <height>{test.viewport_height}</height>
+      </playwright>
+    </step>
+
+    <step id="record_screenshot">
+      <bash>./scripts/e2e-db-cli.sh screenshot {run_id} actual "{path}"</bash>
+    </step>
+
+    <conditional id="compare">
+      <branch condition="baseline_exists">
+        <action>Compare with baseline screenshot</action>
+        <output>diff_result</output>
+      </branch>
+      <branch condition="no_baseline">
+        <action>Mark as needs baseline</action>
+      </branch>
+    </conditional>
+
+    <step id="record_result">
+      <conditional>
+        <branch condition="passed">
+          <bash>./scripts/e2e-db-cli.sh result {run_id} passed</bash>
+        </branch>
+        <branch condition="failed">
+          <bash>./scripts/e2e-db-cli.sh result {run_id} failed "{error}"</bash>
+        </branch>
+      </conditional>
+    </step>
+  </loop>
+
+  <step id="cleanup">
+    <playwright tool="close"/>
+  </step>
+
+  <step id="summary">
+    <action>Show test results summary</action>
+  </step>
+</workflow>
 
 ---
 

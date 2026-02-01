@@ -54,262 +54,218 @@ AskUserQuestion:
 
 ## Routing Flow
 
-### 1. Get Available Specs (Dependency-Aware)
+<workflow name="routing">
+  <step id="get_available">
+    <description>Get specs with resolved dependencies</description>
+    <bash>./scripts/blueprint-db-cli.sh available-with-deps</bash>
+    <output>specs[] where status=approved, working_by=NULL, all deps done</output>
+  </step>
 
-```bash
-./scripts/blueprint-db-cli.sh available-with-deps
-```
+  <step id="determine_instructor">
+    <mapping>
+      <route category="data" instructor="db"/>
+      <route category="ui" instructor="frontend"/>
+      <route category="action" instructor="backend"/>
+    </mapping>
+  </step>
 
-Returns specs that are:
-- Status = `approved`
-- Not locked (`working_by IS NULL`)
-- All dependencies are `done`
+  <parallel for_each="available_specs">
+    <step id="lock">
+      <bash>./scripts/blueprint-db-cli.sh lock {id} {instructor}-instructor</bash>
+    </step>
 
-### 2. Determine Instructor
+    <step id="dispatch_instructor">
+      <task subagent="general-purpose">
+        <role>{instructor}-instructor</role>
+        <read>.claude/agents/instructors/{instructor}.md</read>
+        <input>spec_id, spec_json</input>
+        <actions>
+          1. Check dependencies: ./scripts/blueprint-db-cli.sh deps {id}
+          2. If all deps done, create task content
+          3. Save: ./scripts/blueprint-db-cli.sh task-add {spec_id} '{instructor}' '{content}'
+        </actions>
+        <output>task_id or {"status": "blocked", "blocked_by": [...]}</output>
+      </task>
+    </step>
 
-| Category | Instructor |
-|----------|------------|
-| `data` | db-instructor |
-| `ui` | frontend-instructor |
-| `action` | backend-instructor |
+    <step id="dispatch_coder" after="dispatch_instructor">
+      <bash>./scripts/blueprint-db-cli.sh task-list {spec_id}</bash>
+      <task subagent="general-purpose">
+        <role>{coder}-coder</role>
+        <read>.claude/agents/coders/{coder}.md</read>
+        <input>task_content from task-content {task_id}</input>
+        <actions>
+          1. Create worktree if specified
+          2. Create files
+          3. Commit and push
+          4. Create draft PR
+          5. Update: ./scripts/blueprint-db-cli.sh task-status {task_id} completed
+        </actions>
+        <output>{"status": "complete", "pr_url": "...", "files": [...]}</output>
+      </task>
+    </step>
 
-### 3. Lock and Dispatch (Parallel)
-
-For each available spec:
-
-```bash
-./scripts/blueprint-db-cli.sh lock {id} {instructor}-instructor
-```
-
-Dispatch multiple Tasks in parallel:
-```
-Task(
-  description="Create {type} task instruction",
-  subagent_type="general-purpose",
-  prompt="""
-  You are {instructor}-instructor.
-
-  Read: .claude/agents/instructors/{instructor}.md
-
-  Spec ID: {id}
-  Spec: {json}
-
-  1. Check dependencies: ./scripts/blueprint-db-cli.sh deps {id}
-  2. If all deps done, create task content
-  3. Save to DB: ./scripts/blueprint-db-cli.sh task-add {spec_id} '{instructor}' '{content}'
-  4. If blocked, return: {"status": "blocked", "blocked_by": [...]}
-  """
-)
-```
-
-### 4. Dispatch Coder (After Instructor Completes)
-
-```bash
-# Get task id
-./scripts/blueprint-db-cli.sh task-list {spec_id}
-```
-
-```
-Task(
-  description="Execute {type} task",
-  subagent_type="general-purpose",
-  prompt="""
-  You are {coder}-coder.
-
-  Read: .claude/agents/coders/{coder}.md
-
-  Get task: ./scripts/blueprint-db-cli.sh task-content {task_id}
-
-  Execute instructions:
-  1. Create worktree if specified
-  2. Create files
-  3. Commit and push
-  4. Create draft PR
-  5. Update: ./scripts/blueprint-db-cli.sh task-status {task_id} completed
-  6. Return: {"status": "complete", "pr_url": "...", "files": [...]}
-  """
-)
-```
-
-### 5. Handle Coder Result
-
-#### On Success
-```bash
-./scripts/blueprint-db-cli.sh status {id} impl_review
-./scripts/blueprint-db-cli.sh unlock {id}
-```
-
-#### On Error/Blocked
-```bash
-./scripts/blueprint-db-cli.sh status {id} blocked
-./scripts/blueprint-db-cli.sh unlock {id}
-```
-
-Notify user with error details.
+    <conditional id="handle_result">
+      <branch condition="success">
+        <bash>./scripts/blueprint-db-cli.sh status {id} impl_review</bash>
+        <bash>./scripts/blueprint-db-cli.sh unlock {id}</bash>
+      </branch>
+      <branch condition="error">
+        <bash>./scripts/blueprint-db-cli.sh status {id} blocked</bash>
+        <bash>./scripts/blueprint-db-cli.sh unlock {id}</bash>
+        <action>Notify user with error details</action>
+      </branch>
+    </conditional>
+  </parallel>
+</workflow>
 
 ---
 
 ## Human Review Flow
 
-### impl_review
+<workflow name="human_review">
+  <step id="get_pending">
+    <bash>./scripts/blueprint-db-cli.sh pending-review</bash>
+  </step>
 
-```bash
-./scripts/blueprint-db-cli.sh pending-review
-```
+  <loop for_each="pending_specs">
+    <step id="ask_decision">
+      <prompt>PR ready for review: {name}. What's your decision?</prompt>
+      <options>
+        - Approve & Merge
+        - Request Changes
+        - Skip
+      </options>
+    </step>
 
-For each spec in `impl_review`:
-
-```
-AskUserQuestion:
-  question: "PR ready for review: {name}. What's your decision?"
-  header: "Code Review"
-  options:
-    - label: "Approve & Merge"
-      description: "Merge PR to main"
-    - label: "Request Changes"
-      description: "Send back for revision"
-    - label: "Skip"
-      description: "Review later"
-```
-
-#### If Approved
-```bash
-./scripts/worktree-manager.sh merge {spec_id}
-./scripts/blueprint-db-cli.sh status {id} testing
-./scripts/blueprint-db-cli.sh reviewed {id}
-```
-
-#### If Request Changes
-```
-AskUserQuestion:
-  question: "What changes are needed?"
-  header: "Revision"
-```
-
-```bash
-./scripts/worktree-manager.sh abort {spec_id}
-./scripts/blueprint-db-cli.sh revision {id} '{reason}'
-```
+    <conditional id="handle_decision">
+      <branch condition="Approve & Merge">
+        <bash>./scripts/worktree-manager.sh merge {spec_id}</bash>
+        <bash>./scripts/blueprint-db-cli.sh status {id} testing</bash>
+        <bash>./scripts/blueprint-db-cli.sh reviewed {id}</bash>
+      </branch>
+      <branch condition="Request Changes">
+        <prompt>What changes are needed?</prompt>
+        <bash>./scripts/worktree-manager.sh abort {spec_id}</bash>
+        <bash>./scripts/blueprint-db-cli.sh revision {id} '{reason}'</bash>
+      </branch>
+      <branch condition="Skip">
+        <action>Continue to next spec</action>
+      </branch>
+    </conditional>
+  </loop>
+</workflow>
 
 ---
 
 ## Error Recovery Flow
 
-### blocked specs
+<workflow name="error_recovery">
+  <step id="get_blocked">
+    <bash>./scripts/blueprint-db-cli.sh needs-attention</bash>
+  </step>
 
-```bash
-./scripts/blueprint-db-cli.sh needs-attention
-```
+  <loop for_each="blocked_specs">
+    <step id="ask_action">
+      <prompt>Spec '{name}' is blocked. How to proceed?</prompt>
+      <options>
+        - Add Missing Dependency
+        - Fix Spec
+        - Retry
+        - Skip
+      </options>
+    </step>
 
-For each blocked spec:
-
-```
-AskUserQuestion:
-  question: "Spec '{name}' is blocked. How to proceed?"
-  header: "Blocked"
-  options:
-    - label: "Add Missing Dependency"
-      description: "Create new spec for missing model/component"
-    - label: "Fix Spec"
-      description: "Update spec data"
-    - label: "Retry"
-      description: "Re-run instructor/coder"
-    - label: "Skip"
-      description: "Handle later"
-```
+    <conditional id="handle_action">
+      <branch condition="Add Missing Dependency">
+        <action>Create new spec for missing model/component</action>
+        <bash>./scripts/blueprint-db-cli.sh add-dep {spec_id} {new_spec_id}</bash>
+      </branch>
+      <branch condition="Fix Spec">
+        <action>Update spec data via /blueprint</action>
+        <bash>./scripts/blueprint-db-cli.sh status {id} pending_review</bash>
+      </branch>
+      <branch condition="Retry">
+        <bash>./scripts/blueprint-db-cli.sh status {id} approved</bash>
+        <action>Re-run routing flow</action>
+      </branch>
+      <branch condition="Skip">
+        <action>Handle later</action>
+      </branch>
+    </conditional>
+  </loop>
+</workflow>
 
 ---
 
 ## Parallel Execution
 
-### Dependency-Based (Recommended)
+<workflow name="parallel_execution">
+  <step id="get_available">
+    <bash>./scripts/blueprint-db-cli.sh available-with-deps</bash>
+    <output>specs[]</output>
+  </step>
 
-```bash
-# Get all specs that can run now
-./scripts/blueprint-db-cli.sh available-with-deps
-```
+  <parallel for_each="specs">
+    <task>db task for {slug}</task>
+    <task>frontend task for {slug}</task>
+    <task>backend task for {slug}</task>
+  </parallel>
 
-Launch all available specs in parallel:
-```
-# Single message with multiple Task calls
-Task(description="db task for users", ...)
-Task(description="db task for projects", ...)
-Task(description="frontend task for login", ...)
-```
+  <step id="check_unblocked" after="any_task_completes">
+    <bash>./scripts/blueprint-db-cli.sh available-with-deps</bash>
+    <action>Launch newly unblocked specs</action>
+  </step>
 
-After any spec completes:
-```bash
-# Check if new specs are now unblocked
-./scripts/blueprint-db-cli.sh available-with-deps
-```
-
-### Adding Dependencies
-
-When instructor reports blocked:
-```bash
-./scripts/blueprint-db-cli.sh add-dep {spec_id} {blocked_by_spec_id}
-```
+  <step id="add_dependency" trigger="instructor_reports_blocked">
+    <bash>./scripts/blueprint-db-cli.sh add-dep {spec_id} {blocked_by_spec_id}</bash>
+  </step>
+</workflow>
 
 ---
 
 ## E2E Flow
 
-### E2E 対象 Spec
+<workflow name="e2e">
+  <step id="get_pending">
+    <bash>./scripts/blueprint-db-cli.sh e2e-pending</bash>
+  </step>
 
-```bash
-./scripts/blueprint-db-cli.sh e2e-pending
-```
+  <step id="check_progress">
+    <bash>./scripts/blueprint-db-cli.sh e2e-progress</bash>
+    <bash>./scripts/e2e-db-cli.sh spec-summary {spec_id}</bash>
+  </step>
 
-### Level 進行
+  <conditional id="level_progression" trigger="level_complete">
+    <prompt>Level {N} E2E 完了。Level {N+1} に進みますか?</prompt>
+    <branch condition="Proceed">
+      <action>Increment e2e_level</action>
+    </branch>
+    <branch condition="Stay">
+      <action>Keep current level</action>
+    </branch>
+  </conditional>
 
-```bash
-./scripts/blueprint-db-cli.sh e2e-progress
-./scripts/e2e-db-cli.sh spec-summary {spec_id}
-```
+  <step id="dispatch_test_instructor">
+    <task subagent="general-purpose">
+      <role>test-instructor</role>
+      <read>.claude/agents/instructors/test.md</read>
+      <input>spec_json, level</input>
+      <output>E2E test cases saved to blueprint.db</output>
+    </task>
+  </step>
 
-Level 1 全完了時:
-```
-AskUserQuestion:
-  question: "Level 1 E2E 完了。Level 2 に進みますか?"
-  header: "E2E Level"
-  options:
-    - label: "Proceed to Level 2"
-    - label: "Stay at Level 1"
-```
-
-### E2E Dispatch
-
-```
-Task(
-  description="Create E2E test cases",
-  subagent_type="general-purpose",
-  prompt="""
-  You are test-instructor.
-
-  Read: .claude/agents/instructors/test.md
-
-  Spec: {json}
-  Level: {level}
-
-  Create E2E test cases and save to blueprint.db.
-  """
-)
-
-Task(
-  description="Execute E2E tests",
-  subagent_type="general-purpose",
-  prompt="""
-  You are test-coder.
-
-  Read: .claude/agents/coders/test.md
-
-  Get task: ./scripts/blueprint-db-cli.sh task-content {task_id}
-
-  Execute tests. Take screenshots.
-  Record results in e2e.db.
-  """
-)
-```
+  <step id="dispatch_test_coder" after="dispatch_test_instructor">
+    <task subagent="general-purpose">
+      <role>test-coder</role>
+      <read>.claude/agents/coders/test.md</read>
+      <input>task_content</input>
+      <actions>
+        Execute tests, take screenshots, record in e2e.db
+      </actions>
+    </task>
+  </step>
+</workflow>
 
 ---
 

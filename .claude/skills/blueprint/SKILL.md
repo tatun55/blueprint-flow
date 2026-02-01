@@ -20,205 +20,199 @@ Parse command argument:
 
 ## Init Flow (`/blueprint init`)
 
-### Step 1: Stack Selection
+<workflow name="init">
+  <step id="select_stack">
+    <prompt>Which stack to use?</prompt>
+    <options>
+      - Laravel + Livewire (Recommended): Laravel 12, Livewire 4, Tailwind 4, daisyUI 5
+    </options>
+  </step>
 
-```
-AskUserQuestion:
-  question: "Which stack to use?"
-  header: "Stack"
-  options:
-    - label: "Laravel + Livewire (Recommended)"
-      description: "Laravel 12, Livewire 4, Tailwind 4, daisyUI 5"
-```
+  <conditional id="check_submodule">
+    <branch condition="submodule_exists">
+      <bash>./.blueprint-flow/scripts/init.sh {stack}</bash>
+    </branch>
+    <branch condition="not_exists">
+      <bash>git submodule add https://github.com/tatun55/blueprint-flow .blueprint-flow</bash>
+      <bash>./.blueprint-flow/scripts/init.sh {stack}</bash>
+    </branch>
+  </conditional>
 
-### Step 2: Initialize
-
-If blueprint-flow is already a submodule:
-```bash
-./.blueprint-flow/scripts/init.sh {stack}
-```
-
-If not yet added:
-```bash
-git submodule add https://github.com/tatun55/blueprint-flow .blueprint-flow
-./.blueprint-flow/scripts/init.sh {stack}
-```
-
-### Step 3: Report Success
-
-Show initialized files and next steps.
+  <step id="report">
+    <action>Show initialized files and next steps</action>
+  </step>
+</workflow>
 
 ---
 
 ## Develop Flow (`/blueprint develop`)
 
-Interactive development/improvement of the blueprint-flow framework itself.
+<workflow name="develop">
+  <step id="read_spec">
+    <read>.blueprint-flow/docs/SPECIFICATION.md</read>
+    <action>Understand architecture, design principles, extension points</action>
+  </step>
 
-### Step 1: Read Specification
+  <step id="select_improvement">
+    <prompt>What would you like to improve?</prompt>
+    <options>
+      - Add New Feature: New capability (agent, skill, stack, etc.)
+      - Fix Bug: Correct an issue in existing functionality
+      - Refactor: Improve code quality without changing behavior
+      - Update Documentation: Improve SPECIFICATION.md or other docs
+      - Add New Stack: Support for a new framework (Rails, Next.js, etc.)
+    </options>
+  </step>
 
-```bash
-# Read the full specification document
-Read: .blueprint-flow/docs/SPECIFICATION.md
-```
+  <step id="gather_details">
+    <prompt>Describe the improvement in detail</prompt>
+  </step>
 
-Understand the current architecture, design principles, and extension points.
+  <step id="review_files">
+    <mapping>
+      <route improvement="Add Feature" files="Related SKILL.md, agent files"/>
+      <route improvement="Fix Bug" files="Affected component files"/>
+      <route improvement="Refactor" files="Target files"/>
+      <route improvement="Documentation" files="docs/*.md"/>
+      <route improvement="New Stack" files="stacks/tall-daisy/* (as reference)"/>
+    </mapping>
+  </step>
 
-### Step 2: Improvement Selection
+  <step id="propose_changes">
+    <prompt>Proceed with these changes?</prompt>
+    <options>
+      - Yes, apply changes: Make the changes and commit
+      - Modify approach: Discuss alternative approach
+      - Cancel: Abort without changes
+    </options>
+  </step>
 
-```
-AskUserQuestion:
-  question: "What would you like to improve?"
-  header: "Improve"
-  options:
-    - label: "Add New Feature"
-      description: "New capability (agent, skill, stack, etc.)"
-    - label: "Fix Bug"
-      description: "Correct an issue in existing functionality"
-    - label: "Refactor"
-      description: "Improve code quality without changing behavior"
-    - label: "Update Documentation"
-      description: "Improve SPECIFICATION.md or other docs"
-    - label: "Add New Stack"
-      description: "Support for a new framework (Rails, Next.js, etc.)"
-```
-
-### Step 3: Gather Details
-
-Ask follow-up questions based on selection:
-
-```
-AskUserQuestion:
-  question: "Describe the improvement in detail"
-  header: "Details"
-```
-
-### Step 4: Review Relevant Files
-
-Based on improvement type, read relevant files:
-
-| Improvement | Files to Read |
-|-------------|---------------|
-| Add Feature | Related SKILL.md, agent files |
-| Fix Bug | Affected component files |
-| Refactor | Target files |
-| Documentation | docs/*.md |
-| New Stack | stacks/tall-daisy/* (as reference) |
-
-### Step 5: Propose Changes
-
-Show proposed changes to user:
-
-```
-AskUserQuestion:
-  question: "Proceed with these changes?"
-  header: "Confirm"
-  options:
-    - label: "Yes, apply changes"
-      description: "Make the changes and commit"
-    - label: "Modify approach"
-      description: "Discuss alternative approach"
-    - label: "Cancel"
-      description: "Abort without changes"
-```
-
-### Step 6: Apply Changes
-
-If approved:
-1. Make changes to files in `.blueprint-flow/`
-2. Update SPECIFICATION.md if architecture changed
-3. Update version in docs/SPECIFICATION.md
-
-### Step 7: Commit and Push
-
-```bash
-cd .blueprint-flow
-git add -A
-git commit -m "{descriptive message}
-
-Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>"
-git push origin main
-cd ..
-```
-
-### Step 8: Re-initialize Project
-
-```bash
-./.blueprint-flow/scripts/update.sh
-```
-
-Report changes applied and next steps.
+  <conditional id="apply">
+    <branch condition="Yes">
+      <action>Make changes to files in .blueprint-flow/</action>
+      <action>Update SPECIFICATION.md if architecture changed</action>
+      <bash>cd .blueprint-flow && git add -A && git commit -m "{message}" && git push origin main && cd ..</bash>
+      <bash>./.blueprint-flow/scripts/update.sh</bash>
+    </branch>
+    <branch condition="Modify">
+      <action>Discuss alternative approach</action>
+      <goto>propose_changes</goto>
+    </branch>
+    <branch condition="Cancel">
+      <action>Abort without changes</action>
+    </branch>
+  </conditional>
+</workflow>
 
 ---
 
 ## Pull Flow (`/blueprint pull`)
 
-Pull latest blueprint-flow from remote (no modifications).
+<workflow name="pull">
+  <step id="check_version">
+    <bash>cat .blueprint-flow-version</bash>
+  </step>
 
-### Step 1: Check Current Version
+  <step id="pull">
+    <bash>cd .blueprint-flow && git pull origin main && cd ..</bash>
+  </step>
 
-```bash
-cat .blueprint-flow-version
-```
+  <step id="apply">
+    <bash>./.blueprint-flow/scripts/update.sh</bash>
+  </step>
 
-### Step 2: Pull Latest
-
-```bash
-cd .blueprint-flow && git pull origin main && cd ..
-```
-
-### Step 3: Apply Updates
-
-```bash
-./.blueprint-flow/scripts/update.sh
-```
-
-### Step 4: Report
-
-Show old vs new version and any notable changes.
+  <step id="report">
+    <action>Show old vs new version and notable changes</action>
+  </step>
+</workflow>
 
 ---
 
 ## Spec Management Flow (no args)
 
-### Initial Check
+<workflow name="spec_management">
+  <step id="initial_check">
+    <bash>./scripts/blueprint-db-cli.sh overview</bash>
+    <conditional>
+      <branch condition="db_not_initialized">
+        <bash>./scripts/blueprint-db-cli.sh init</bash>
+      </branch>
+    </conditional>
+  </step>
 
-```bash
-./scripts/blueprint-db-cli.sh overview
-```
+  <step id="action_selection">
+    <prompt>What would you like to do?</prompt>
+    <options>
+      - Create New Spec: Add a new spec (draft status)
+      - Review Pending: Review specs awaiting approval
+      - Update Existing: Modify an existing spec
+      - Change Status: Move spec through workflow
+      - View Progress: Check overall progress
+    </options>
+  </step>
 
-If DB not initialized:
-```bash
-./scripts/blueprint-db-cli.sh init
-```
-
-### Action Selection
-
-```
-AskUserQuestion:
-  question: "What would you like to do?"
-  header: "Action"
-  options:
-    - label: "Create New Spec"
-      description: "Add a new spec (draft status)"
-    - label: "Review Pending"
-      description: "Review specs awaiting approval"
-    - label: "Update Existing"
-      description: "Modify an existing spec"
-    - label: "Change Status"
-      description: "Move spec through workflow"
-    - label: "View Progress"
-      description: "Check overall progress"
-```
+  <conditional id="route_action">
+    <branch condition="Create New Spec">
+      <goto>create_flow</goto>
+    </branch>
+    <branch condition="Review Pending">
+      <goto>review_flow</goto>
+    </branch>
+    <branch condition="Update Existing">
+      <goto>update_flow</goto>
+    </branch>
+    <branch condition="Change Status">
+      <goto>status_flow</goto>
+    </branch>
+    <branch condition="View Progress">
+      <goto>progress_flow</goto>
+    </branch>
+  </conditional>
+</workflow>
 
 ---
 
 ## Status Workflow
 
-```
-draft → pending_review → approved → in_progress → impl_review → testing → done
-                ↑                         ↓
-                └──── needs_revision ←────┘
-```
+<state_machine name="spec_status">
+  <state name="draft" type="initial">
+    <transition to="pending_review" trigger="human_submits"/>
+  </state>
+
+  <state name="pending_review">
+    <transition to="approved" trigger="human_approves"/>
+    <transition to="needs_revision" trigger="human_requests_changes"/>
+  </state>
+
+  <state name="approved">
+    <transition to="in_progress" trigger="agent_locks"/>
+  </state>
+
+  <state name="in_progress">
+    <transition to="impl_review" trigger="coder_completes"/>
+    <transition to="blocked" trigger="coder_blocked"/>
+  </state>
+
+  <state name="impl_review">
+    <transition to="testing" trigger="human_approves"/>
+    <transition to="needs_revision" trigger="human_requests_changes"/>
+  </state>
+
+  <state name="testing">
+    <transition to="done" trigger="tests_pass"/>
+    <transition to="needs_revision" trigger="tests_fail"/>
+  </state>
+
+  <state name="needs_revision" type="recovery">
+    <transition to="pending_review" trigger="spec_updated"/>
+  </state>
+
+  <state name="blocked" type="recovery">
+    <transition to="approved" trigger="dependency_resolved"/>
+  </state>
+
+  <state name="done" type="terminal"/>
+</state_machine>
 
 ### Status Commands
 
@@ -235,160 +229,138 @@ draft → pending_review → approved → in_progress → impl_review → testin
 
 ## Create Flow
 
-### Type Selection
+<workflow name="create_flow">
+  <step id="select_type">
+    <prompt>What type of spec to create?</prompt>
+    <options>
+      - Project Overview: App name, features, user roles (core/overview)
+      - Database Table: Table with columns and relations (data/tables)
+      - Page Spec: UI page definition (ui/pages)
+      - Partial: Reusable component (ui/partials)
+      - Layout: Page layout (ui/layouts)
+      - Action: Business logic (action/sync, async, scheduled)
+      - Seeder Definition: Dummy data spec (data/seeders)
+    </options>
+  </step>
 
-```
-AskUserQuestion:
-  question: "What type of spec to create?"
-  header: "Type"
-  options:
-    - label: "Project Overview"
-      description: "App name, features, user roles (core/overview)"
-    - label: "Database Table"
-      description: "Table with columns and relations (data/tables)"
-    - label: "Page Spec"
-      description: "UI page definition (ui/pages)"
-    - label: "Partial"
-      description: "Reusable component (ui/partials)"
-    - label: "Layout"
-      description: "Page layout (ui/layouts)"
-    - label: "Action"
-      description: "Business logic (action/sync, async, scheduled)"
-    - label: "Seeder Definition"
-      description: "Dummy data spec (data/seeders)"
-```
+  <step id="gather_data">
+    <action>Collect spec details based on type</action>
+    <action>Validate slug: lowercase, underscores only</action>
+    <action>Preview JSON before saving</action>
+  </step>
 
-### After Creating
+  <step id="save">
+    <bash>./scripts/blueprint-db-cli.sh add {category} {type} {slug} '{name}' '{json}'</bash>
+    <output>Spec created with status=draft</output>
+  </step>
 
-New specs start as `draft`. Ask user:
+  <step id="next_action">
+    <prompt>Spec created. What next?</prompt>
+    <options>
+      - Submit for Review: Set status to pending_review
+      - Continue Editing: Make more changes first
+      - Done: Leave as draft
+    </options>
+  </step>
 
-```
-AskUserQuestion:
-  question: "Spec created. What next?"
-  header: "Next"
-  options:
-    - label: "Submit for Review"
-      description: "Set status to pending_review"
-    - label: "Continue Editing"
-      description: "Make more changes first"
-    - label: "Done"
-      description: "Leave as draft"
-```
-
-If "Submit for Review":
-```bash
-./scripts/blueprint-db-cli.sh status {id} pending_review
-```
+  <conditional id="handle_next">
+    <branch condition="Submit for Review">
+      <bash>./scripts/blueprint-db-cli.sh status {id} pending_review</bash>
+    </branch>
+    <branch condition="Continue Editing">
+      <goto>gather_data</goto>
+    </branch>
+    <branch condition="Done">
+      <action>Exit</action>
+    </branch>
+  </conditional>
+</workflow>
 
 ---
 
 ## Review Pending Flow
 
-### Step 1: List Pending
+<workflow name="review_flow">
+  <step id="list_pending">
+    <bash>./scripts/blueprint-db-cli.sh pending-review</bash>
+  </step>
 
-```bash
-./scripts/blueprint-db-cli.sh pending-review
-```
+  <loop for_each="pending_specs">
+    <step id="get_details">
+      <bash>./scripts/blueprint-db-cli.sh get {category} {type} {slug}</bash>
+      <action>Display full spec data to user</action>
+    </step>
 
-Show specs awaiting review.
+    <step id="decision">
+      <prompt>Review decision for this spec?</prompt>
+      <options>
+        - Approve: Ready for implementation
+        - Request Changes: Needs revision before approval
+        - Skip: Review later
+      </options>
+    </step>
 
-### Step 2: Get Spec Details
-
-```bash
-./scripts/blueprint-db-cli.sh get {category} {type} {slug}
-```
-
-Display full spec data to user.
-
-### Step 3: Review Decision
-
-```
-AskUserQuestion:
-  question: "Review decision for this spec?"
-  header: "Decision"
-  options:
-    - label: "Approve"
-      description: "Ready for implementation"
-    - label: "Request Changes"
-      description: "Needs revision before approval"
-    - label: "Skip"
-      description: "Review later"
-```
-
-If "Approve":
-```bash
-./scripts/blueprint-db-cli.sh status {id} approved
-./scripts/blueprint-db-cli.sh reviewed {id}
-```
-
-If "Request Changes":
-```
-AskUserQuestion:
-  question: "What changes are needed?"
-  header: "Reason"
-```
-Then:
-```bash
-./scripts/blueprint-db-cli.sh revision {id} '{reason}'
-```
+    <conditional id="handle_decision">
+      <branch condition="Approve">
+        <bash>./scripts/blueprint-db-cli.sh status {id} approved</bash>
+        <bash>./scripts/blueprint-db-cli.sh reviewed {id}</bash>
+      </branch>
+      <branch condition="Request Changes">
+        <prompt>What changes are needed?</prompt>
+        <bash>./scripts/blueprint-db-cli.sh revision {id} '{reason}'</bash>
+      </branch>
+      <branch condition="Skip">
+        <action>Continue to next spec</action>
+      </branch>
+    </conditional>
+  </loop>
+</workflow>
 
 ---
 
 ## Update Spec Flow
 
-### Step 1: List and Select
+<workflow name="update_flow">
+  <step id="list_specs">
+    <bash>./scripts/blueprint-db-cli.sh overview</bash>
+  </step>
 
-```bash
-./scripts/blueprint-db-cli.sh overview
-```
+  <step id="select_spec">
+    <prompt>Which spec to update? (provide ID)</prompt>
+  </step>
 
-```
-AskUserQuestion:
-  question: "Which spec to update? (provide ID)"
-  header: "Select"
-```
+  <step id="get_current">
+    <bash>./scripts/blueprint-db-cli.sh get {category} {type} {slug}</bash>
+  </step>
 
-### Step 2: Get Current Data
+  <conditional id="update_type">
+    <branch condition="type=tables">
+      <prompt multiSelect="true">What to update?</prompt>
+      <options>
+        - Add columns
+        - Modify columns
+        - Remove columns
+        - Add relations
+      </options>
+    </branch>
+    <branch condition="type=pages">
+      <prompt multiSelect="true">What to update?</prompt>
+      <options>
+        - Change route
+        - Add/modify sections
+        - Add/modify actions
+        - Change auth/roles
+      </options>
+    </branch>
+  </conditional>
 
-```bash
-./scripts/blueprint-db-cli.sh get {category} {type} {slug}
-```
-
-### Step 3: Ask What to Update
-
-For tables:
-```
-AskUserQuestion:
-  question: "What to update?"
-  header: "Update"
-  multiSelect: true
-  options:
-    - label: "Add columns"
-    - label: "Modify columns"
-    - label: "Remove columns"
-    - label: "Add relations"
-```
-
-For pages:
-```
-AskUserQuestion:
-  question: "What to update?"
-  header: "Update"
-  multiSelect: true
-  options:
-    - label: "Change route"
-    - label: "Add/modify sections"
-    - label: "Add/modify actions"
-    - label: "Change auth/roles"
-```
-
-### Step 4: Merge and Save
-
-```bash
-./scripts/blueprint-db-cli.sh update {id} '{...merged json...}'
-```
-
-Note: Updating resets `human_reviewed` to false.
+  <step id="apply_changes">
+    <action>Merge changes with current data</action>
+    <action>Preview JSON before saving</action>
+    <bash>./scripts/blueprint-db-cli.sh update {id} '{...merged json...}'</bash>
+    <note>Updating resets human_reviewed to false</note>
+  </step>
+</workflow>
 
 ---
 
