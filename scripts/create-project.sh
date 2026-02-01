@@ -65,10 +65,9 @@ log_info "Step 2: Installing dependencies..."
 composer require livewire/livewire --quiet
 log_success "Livewire installed"
 
-# NPM dependencies + Tailwind + daisyUI
+# NPM dependencies + Tailwind 4 + daisyUI 5
 npm install --silent
-npm install -D tailwindcss postcss autoprefixer daisyui --silent
-npx tailwindcss init -p
+npm install -D tailwindcss @tailwindcss/vite daisyui --silent
 log_success "Tailwind + daisyUI installed"
 
 # ============================================
@@ -105,10 +104,11 @@ php artisan migrate --quiet
 log_success "Migrations completed"
 
 # ============================================
-# Step 4: Configure Tailwind
+# Step 4: Configure Tailwind 4 + Vite
 # ============================================
 log_info "Step 4: Configuring Tailwind..."
 
+# Tailwind 4 config (optional, for daisyUI themes)
 cat > tailwind.config.js << 'EOF'
 import daisyui from 'daisyui'
 
@@ -119,9 +119,6 @@ export default {
     "./resources/**/*.js",
     "./app/Livewire/**/*.php",
   ],
-  theme: {
-    extend: {},
-  },
   plugins: [daisyui],
   daisyui: {
     themes: ["light", "dark"],
@@ -129,9 +126,27 @@ export default {
 }
 EOF
 
-# Update resources/css/app.css
+# Update resources/css/app.css for Tailwind 4
 cat > resources/css/app.css << 'EOF'
 @import "tailwindcss";
+@config "../tailwind.config.js";
+EOF
+
+# Update vite.config.js for Tailwind 4
+cat > vite.config.js << 'EOF'
+import { defineConfig } from 'vite';
+import laravel from 'laravel-vite-plugin';
+import tailwindcss from '@tailwindcss/vite';
+
+export default defineConfig({
+    plugins: [
+        laravel({
+            input: ['resources/css/app.css', 'resources/js/app.js'],
+            refresh: true,
+        }),
+        tailwindcss(),
+    ],
+});
 EOF
 
 log_success "Tailwind configured"
