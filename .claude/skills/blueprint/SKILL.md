@@ -102,7 +102,7 @@ Based on improvement type, read relevant files:
 | Fix Bug | Affected component files |
 | Refactor | Target files |
 | Documentation | docs/*.md |
-| New Stack | stacks/laravel/* (as reference) |
+| New Stack | stacks/tall-daisy/* (as reference) |
 
 ### Step 5: Propose Changes
 

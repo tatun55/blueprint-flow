@@ -6,7 +6,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BLUEPRINT_FLOW_DIR="$(dirname "$SCRIPT_DIR")"
-STACK="${1:-laravel}"
+STACK="${1:-tall-daisy}"
 TARGET_DIR="${2:-.}"
 
 echo "Initializing blueprint-flow with stack: $STACK"

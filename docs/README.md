@@ -73,7 +73,7 @@ blueprint-flow/
 │   ├── schema.sql
 │   └── schema.dbml
 ├── stacks/
-│   └── laravel/             # Stack-specific patterns
+│   └── tall-daisy/          # TALL + daisyUI stack patterns
 │       ├── config.env       # Path variables
 │       ├── patterns.md      # Code patterns
 │       └── structure.md     # Directory conventions
@@ -93,7 +93,7 @@ blueprint-flow/
 git submodule add https://github.com/tatun55/blueprint-flow .blueprint-flow
 
 # Initialize with your stack
-./.blueprint-flow/scripts/init.sh laravel
+./.blueprint-flow/scripts/init.sh tall-daisy
 
 # Or use the skill
 /blueprint init
