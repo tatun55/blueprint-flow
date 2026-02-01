@@ -12,8 +12,8 @@ Human-in-the-loop spec management with blueprint-flow framework support.
 
 Parse command argument:
 - `/blueprint init` → Initialize blueprint-flow in project
-- `/blueprint update` → Improve blueprint-flow framework (interactive)
-- `/blueprint sync` → Pull latest blueprint-flow from remote
+- `/blueprint develop` → Develop/improve blueprint-flow framework (interactive)
+- `/blueprint pull` → Pull latest blueprint-flow from remote
 - `/blueprint` (no args) → Spec management
 
 ---
@@ -50,9 +50,9 @@ Show initialized files and next steps.
 
 ---
 
-## Update Flow (`/blueprint update`)
+## Develop Flow (`/blueprint develop`)
 
-Interactive improvement of the blueprint-flow framework itself.
+Interactive development/improvement of the blueprint-flow framework itself.
 
 ### Step 1: Read Specification
 
@@ -150,7 +150,7 @@ Report changes applied and next steps.
 
 ---
 
-## Sync Flow (`/blueprint sync`)
+## Pull Flow (`/blueprint pull`)
 
 Pull latest blueprint-flow from remote (no modifications).
 
