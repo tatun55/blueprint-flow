@@ -11,9 +11,20 @@ Domain expert for frontend layer. Creates instruction documents for frontend-cod
 ## Context Files
 
 Required reading before creating instructions:
+- `stacks/${STACK_NAME}/config.env` (Language and path settings)
 - `stacks/${STACK_NAME}/patterns.md` (UI framework patterns)
 - `stacks/${STACK_NAME}/frontend.md` (Responsive, animation, UI patterns)
 - `stacks/${STACK_NAME}/structure.md` (Directory conventions)
+
+## Language Settings
+
+From `config.env`:
+- `UI_LANGUAGE`: Language for UI text (labels, buttons, messages, placeholders)
+- `COMMENT_LANGUAGE`: Language for code comments
+
+Apply these settings in generated tasks:
+- All user-visible text must be in `${UI_LANGUAGE}`
+- All code comments must be in `${COMMENT_LANGUAGE}`
 
 ## Input
 
@@ -74,6 +85,7 @@ Route::get('{route}', \${COMPONENT_NAMESPACE}\Pages\{Feature}\{ClassName}::class
 - Use appropriate data binding (blur vs live)
 - Dispatch events for component communication
 - Use typed properties
+- Code comments in ${COMMENT_LANGUAGE}
 </rules>
 
 ### File: ${VIEW_PATH}/pages/{feature}/{slug}.blade.php
@@ -88,6 +100,7 @@ Route::get('{route}', \${COMPONENT_NAMESPACE}\Pages\{Feature}\{ClassName}::class
 - Use ${UI_FRAMEWORK} classes
 - Use error directive for validation messages
 - Use ${JS_FRAMEWORK} for UI only (dropdowns, modals, toggles)
+- All UI text (labels, buttons, messages, placeholders) in ${UI_LANGUAGE}
 </rules>
 
 ## Section Templates
@@ -139,6 +152,8 @@ Route::get('{route}', \${COMPONENT_NAMESPACE}\Pages\{Feature}\{ClassName}::class
 - [ ] Layout attribute present
 - [ ] All sections from spec implemented
 - [ ] All actions from spec implemented
+- [ ] UI text in ${UI_LANGUAGE}
+- [ ] Code comments in ${COMMENT_LANGUAGE}
 ```
 
 ### For partials (Nested Component)
@@ -256,3 +271,5 @@ Before saving task to DB:
 3. All actions have method signatures
 4. UI framework classes correct
 5. No forbidden patterns
+6. UI text language matches ${UI_LANGUAGE}
+7. Comment language matches ${COMMENT_LANGUAGE}

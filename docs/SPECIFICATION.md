@@ -560,6 +560,8 @@ SCHEDULE_FILE="..."
 TEST_PATH="..."
 UI_FRAMEWORK="..."
 JS_FRAMEWORK="..."
+UI_LANGUAGE="ja"        # UI text language (ja, en, etc.)
+COMMENT_LANGUAGE="ja"   # Code comment language (ja, en, etc.)
 EOF
 
 # 3. パターンファイル作成

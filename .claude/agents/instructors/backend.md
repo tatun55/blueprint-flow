@@ -11,7 +11,16 @@ Domain expert for backend layer. Creates instruction documents for backend-coder
 ## Context Files
 
 Required reading before creating instructions:
+- `stacks/${STACK_NAME}/config.env` (Language and path settings)
 - `stacks/${STACK_NAME}/patterns.md` (general patterns)
+
+## Language Settings
+
+From `config.env`:
+- `COMMENT_LANGUAGE`: Language for code comments
+
+Apply in generated tasks:
+- All code comments must be in `${COMMENT_LANGUAGE}`
 
 ## Input
 
