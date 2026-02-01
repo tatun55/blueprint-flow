@@ -25,13 +25,6 @@ echo "Current version: $OLD_VERSION"
 # Load stack config
 source "$BLUEPRINT_FLOW_DIR/stacks/$STACK/config.env"
 
-# Backup current agents (in case of custom modifications)
-BACKUP_DIR="$TARGET_DIR/.blueprint-flow-backup-$(date +%Y%m%d_%H%M%S)"
-echo "Backing up to: $BACKUP_DIR"
-mkdir -p "$BACKUP_DIR"
-cp -r "$TARGET_DIR/.claude/agents" "$BACKUP_DIR/" 2>/dev/null || true
-cp -r "$TARGET_DIR/.claude/skills" "$BACKUP_DIR/" 2>/dev/null || true
-
 # Update instructor files with variable substitution
 echo "Updating agent files..."
 for file in "$BLUEPRINT_FLOW_DIR/.claude/agents/instructors"/*.md; do
@@ -73,8 +66,6 @@ echo "Blueprint-flow updated successfully!"
 echo ""
 echo "Old version: $OLD_VERSION"
 echo "New version: $NEW_VERSION"
-echo ""
-echo "Backup saved to: $BACKUP_DIR"
 echo ""
 echo "Note: Databases (blueprint.db, e2e.db) were preserved."
 echo "      If schema changed, you may need to run migrations."
