@@ -1,0 +1,71 @@
+// E2E Test Schema - Visual Regression Testing
+// Database: SQLite
+
+Table test_cases {
+  id integer [pk, increment]
+  slug text [not null, unique]
+  name text [not null]
+  description text
+
+  // Blueprint integration
+  spec_id integer [note: 'Reference to blueprint.specs.id']
+  level integer [default: 1, note: 'Test level 1-3 (coverage depth)']
+
+  // Test definition
+  url text [not null]
+  viewport_width integer [default: 1280]
+  viewport_height integer [default: 720]
+  status text [default: 'defined', note: 'defined, active, disabled']
+
+  // Timestamps
+  created_at datetime [default: `CURRENT_TIMESTAMP`]
+  updated_at datetime [default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    spec_id
+    level
+    status
+  }
+}
+
+Table test_runs {
+  id integer [pk, increment]
+  test_case_id integer [not null, ref: > test_cases.id]
+  run_at datetime [default: `CURRENT_TIMESTAMP`]
+  result text [default: 'pending', note: 'pending, passed, failed, error']
+
+  // Screenshot paths
+  screenshot_path text
+  baseline_path text
+  diff_percentage real [note: 'Visual diff percentage']
+
+  // Human review
+  human_reviewed integer [default: 0, note: '1 if human has reviewed screenshots']
+
+  // Execution info
+  error_message text
+  duration_ms integer
+  executor text [default: 'claude', note: 'claude, ci, human']
+  notes text
+
+  indexes {
+    test_case_id
+    result
+    human_reviewed
+  }
+}
+
+Table screenshots {
+  id integer [pk, increment]
+  test_run_id integer [not null, ref: > test_runs.id]
+  type text [not null, note: 'baseline, actual, diff']
+  file_path text [not null]
+  width integer
+  height integer
+  file_size integer
+  captured_at datetime [default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    test_run_id
+  }
+}

@@ -1,0 +1,20 @@
+# Database files (generated, not tracked)
+blueprint/blueprint.db
+tests/e2e/e2e.db
+
+# Screenshots (generated during tests)
+tests/e2e/screenshots/
+
+# Backup files
+.blueprint-flow-backup-*/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
