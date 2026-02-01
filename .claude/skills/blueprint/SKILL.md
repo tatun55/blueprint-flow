@@ -1,597 +1,521 @@
 ---
 name: blueprint
-description: Interactive spec management with human-in-the-loop workflow. Guides through Overview → Features → Definition → Review flow.
+description: Interactive spec management with quality validation. Recursively refines specs until coding-ready.
 allowed-tools: Bash, Read, Write, AskUserQuestion
 ---
 
 # Blueprint Spec Manager
 
-Human-in-the-loop spec management. Guides through complete app definition flow.
+Human-in-the-loop spec management with **quality validation**.
+Specs are recursively refined until they reach coding-ready clarity.
 
-## Language Setting
+---
 
-**Default: 日本語 (Japanese)**
+## Content Requirements (CRITICAL)
 
-Check `.blueprint-language` file for current setting:
+All spec `data` content MUST be:
+
+| Requirement | Description |
+|-------------|-------------|
+| **Format** | Markdown (.md) format |
+| **Language** | English only |
+| **Clarity** | Necessary, sufficient, and unambiguous |
+| **Coding-ready** | Detailed enough for implementation without further questions |
+
+### Overview Spec Requirements
+
+The `core/overview` spec MUST include:
+
+```markdown
+# {App Name}
+
+## Description
+{Clear description of what the app does and why}
+
+## Target Users
+{Who uses this app and their goals}
+
+## User Roles
+| Role | Description | Permissions |
+|------|-------------|-------------|
+| admin | ... | ... |
+| user | ... | ... |
+
+## Features
+| Feature | Description | Route | Priority |
+|---------|-------------|-------|----------|
+| Dashboard | ... | /dashboard | P1 |
+| User List | ... | /users | P1 |
+
+## Routes
+| Route | Page | Auth | Roles |
+|-------|------|------|-------|
+| / | Landing | No | - |
+| /dashboard | Dashboard | Yes | all |
+| /users | User List | Yes | admin |
+
+## Tech Stack
+- Backend: Laravel 12
+- Frontend: Livewire 4 + Alpine.js
+- CSS: Tailwind 4 + daisyUI 5
+```
+
+---
+
+## Quality Validation System
+
+<quality_check name="spec_validation">
+  <criteria id="completeness">
+    <check>All required fields are present</check>
+    <check>No placeholder text (TBD, TODO, ...)</check>
+    <check>No ambiguous terms without definition</check>
+  </criteria>
+
+  <criteria id="clarity">
+    <check>Each feature has clear description</check>
+    <check>Routes are explicitly defined</check>
+    <check>User roles and permissions are clear</check>
+    <check>Data relationships are specified</check>
+  </criteria>
+
+  <criteria id="coding_ready">
+    <check>UI specs have all sections defined</check>
+    <check>Table specs have all columns with types</check>
+    <check>Action specs have input/output defined</check>
+    <check>No questions remain for implementation</check>
+  </criteria>
+
+  <scoring>
+    <level value="1" label="Incomplete">Missing critical information</level>
+    <level value="2" label="Vague">Has placeholders or ambiguity</level>
+    <level value="3" label="Partial">Some details missing</level>
+    <level value="4" label="Clear">Ready for implementation</level>
+    <level value="5" label="Excellent">Comprehensive with edge cases</level>
+  </scoring>
+
+  <threshold>4</threshold>
+  <action_if_below>recursive_refinement</action_if_below>
+</quality_check>
+
+---
+
+## Interaction Language
+
+**Default: 日本語 (Japanese)** for AskUserQuestion prompts.
+
 ```bash
 cat .blueprint-language 2>/dev/null || echo "ja"
 ```
 
-To change: `/blueprint lang en` or `/blueprint lang ja`
-
-All AskUserQuestion prompts, labels, and descriptions should use the configured language.
+**Note:** Interaction language is for prompts only. Spec content is ALWAYS in English.
 
 ---
 
 ## Command Routing
 
-Parse command argument:
-- `/blueprint init` → Initialize blueprint-flow in project
-- `/blueprint develop` → Develop/improve blueprint-flow framework
-- `/blueprint pull` → Pull latest blueprint-flow from remote
+- `/blueprint init` → Initialize blueprint-flow
+- `/blueprint develop` → Develop framework itself
+- `/blueprint pull` → Pull latest from remote
 - `/blueprint lang {ja|en}` → Set interaction language
-- `/blueprint` (no args) → **Guided Spec Flow** (main flow)
+- `/blueprint` (no args) → **Guided Spec Flow**
 
 ---
 
-## Guided Spec Flow (Main Command)
+## Guided Spec Flow
 
 <workflow name="guided_flow">
-  <config>
-    <language_file>.blueprint-language</language_file>
-    <default_language>ja</default_language>
-  </config>
-
   <step id="init_check">
     <bash>./scripts/blueprint-db-cli.sh overview 2>/dev/null || ./scripts/blueprint-db-cli.sh init</bash>
-    <action>Load current language setting</action>
   </step>
 
   <step id="detect_phase">
-    <description>Analyze current state to determine which phase to resume</description>
-    <bash>./scripts/blueprint-db-cli.sh progress</bash>
     <logic>
-      - No specs exist → Start from Overview
-      - Overview exists but no features → Feature Listing phase
-      - Features exist but some are draft → Definition phase
-      - All features defined, some pending_review → Review phase
+      - No specs → Overview phase
+      - Overview not quality-validated → Overview refinement
+      - Overview done, no features → Feature listing
+      - Features exist, some draft → Definition phase
+      - All pending_review → Review phase
       - All approved → Ready for /hub
     </logic>
   </step>
 
-  <step id="show_status_and_ask">
-    <action>Show current progress summary</action>
+  <step id="show_status">
+    <action>Show progress with quality scores</action>
     <prompt lang="ja">現在の状況です。どうしますか？</prompt>
-    <prompt lang="en">Current status. What would you like to do?</prompt>
     <options>
-      <option id="continue">
-        <label lang="ja">続きから進める (推奨)</label>
-        <label lang="en">Continue from current phase (Recommended)</label>
-        <description>Resume the guided flow</description>
-      </option>
-      <option id="overview">
-        <label lang="ja">概要を編集</label>
-        <label lang="en">Edit Overview</label>
-        <description>Modify app overview</description>
-      </option>
-      <option id="features">
-        <label lang="ja">機能リストを編集</label>
-        <label lang="en">Edit Feature List</label>
-        <description>Add/modify features</description>
-      </option>
-      <option id="define">
-        <label lang="ja">機能を詳細定義</label>
-        <label lang="en">Define Features</label>
-        <description>Define spec details</description>
-      </option>
-      <option id="review">
-        <label lang="ja">レビュー</label>
-        <label lang="en">Review Specs</label>
-        <description>Review pending specs</description>
-      </option>
+      <option id="continue" recommended="true">続きから進める / Continue</option>
+      <option id="overview">概要を編集 / Edit Overview</option>
+      <option id="features">機能リストを編集 / Edit Features</option>
+      <option id="define">機能を詳細定義 / Define Features</option>
+      <option id="review">レビュー / Review</option>
     </options>
   </step>
-
-  <conditional id="route_phase">
-    <branch condition="continue">
-      <goto>detected_phase</goto>
-    </branch>
-    <branch condition="overview">
-      <goto>overview_phase</goto>
-    </branch>
-    <branch condition="features">
-      <goto>feature_list_phase</goto>
-    </branch>
-    <branch condition="define">
-      <goto>definition_phase</goto>
-    </branch>
-    <branch condition="review">
-      <goto>review_phase</goto>
-    </branch>
-  </conditional>
 </workflow>
 
 ---
 
-## Phase 1: Overview (アプリ概要)
+## Phase 1: Overview
 
 <workflow name="overview_phase">
-  <step id="check_existing">
-    <bash>./scripts/blueprint-db-cli.sh get core overview app 2>/dev/null</bash>
+  <step id="gather_info">
+    <description>Gather app information through conversation</description>
+    <prompt lang="ja">アプリについて教えてください</prompt>
+    <questions>
+      <question>アプリ名は？ / App name?</question>
+      <question>何をするアプリ？目的は？ / What does it do? Purpose?</question>
+      <question>誰が使う？ / Who uses it?</question>
+      <question>ユーザー種別は？ / User roles?</question>
+      <question>主な機能は？ / Main features?</question>
+      <question>各機能のURLパスは？ / Routes for each feature?</question>
+    </questions>
+  </step>
+
+  <step id="generate_overview">
+    <description>Generate overview in required format</description>
+    <action>Create markdown content following Overview Requirements</action>
+    <action>Include: Description, Users, Roles, Features table, Routes table</action>
+  </step>
+
+  <step id="quality_check">
+    <description>Validate overview quality</description>
+    <validation>
+      <check id="has_description">Description is clear and specific</check>
+      <check id="has_users">Target users are defined</check>
+      <check id="has_roles">User roles with permissions</check>
+      <check id="has_features">Features with routes and priority</check>
+      <check id="has_routes">Complete route table</check>
+      <check id="no_placeholders">No TBD, TODO, or ...</check>
+      <check id="in_english">Content is in English</check>
+    </validation>
+  </step>
+
+  <step id="refinement_loop">
+    <description>Recursive refinement until quality threshold met</description>
     <conditional>
-      <branch condition="exists">
-        <action>Show current overview</action>
-        <prompt lang="ja">概要を更新しますか？</prompt>
-        <prompt lang="en">Update the overview?</prompt>
+      <branch condition="quality_score < 4">
+        <action>Identify missing/unclear items</action>
+        <prompt lang="ja">以下の点が不明確です。詳しく教えてください：</prompt>
+        <list_issues>Show specific items that need clarification</list_issues>
+        <goto>gather_additional_info</goto>
       </branch>
-      <branch condition="not_exists">
-        <goto>gather_overview</goto>
+      <branch condition="quality_score >= 4">
+        <action>Show final overview to user</action>
+        <prompt lang="ja">概要が完成しました。確認してください：</prompt>
+        <goto>confirm_overview</goto>
       </branch>
     </conditional>
   </step>
 
-  <step id="gather_overview">
-    <prompt lang="ja">アプリの概要を教えてください</prompt>
-    <prompt lang="en">Tell me about your app</prompt>
-    <questions>
-      <question id="app_name">
-        <label lang="ja">アプリ名</label>
-        <label lang="en">App Name</label>
-      </question>
-      <question id="description">
-        <label lang="ja">アプリの説明（何をするアプリ？）</label>
-        <label lang="en">App Description (What does it do?)</label>
-      </question>
-      <question id="target_users">
-        <label lang="ja">ターゲットユーザー</label>
-        <label lang="en">Target Users</label>
-      </question>
-      <question id="user_roles">
-        <label lang="ja">ユーザー種別（例: admin, user, guest）</label>
-        <label lang="en">User Roles (e.g., admin, user, guest)</label>
-      </question>
-      <question id="main_features">
-        <label lang="ja">主要な機能（箇条書きで）</label>
-        <label lang="en">Main Features (bullet points)</label>
-      </question>
-    </questions>
+  <step id="gather_additional_info">
+    <description>Ask specific questions about unclear items</description>
+    <action>Generate targeted questions based on validation failures</action>
+    <examples>
+      <example issue="missing_routes">
+        「{feature}」のURLパスを教えてください（例: /users, /projects/{id}）
+      </example>
+      <example issue="vague_description">
+        「{feature}」の具体的な動作を教えてください。ユーザーは何ができますか？
+      </example>
+      <example issue="missing_permissions">
+        各ロールが{feature}で何ができるか教えてください
+      </example>
+    </examples>
+    <goto>generate_overview</goto>
   </step>
 
-  <step id="save_overview">
-    <action>Generate JSON from answers</action>
-    <action>Preview to user</action>
-    <bash>./scripts/blueprint-db-cli.sh add core overview app '{app_name}' '{json}'</bash>
-    <bash>./scripts/blueprint-db-cli.sh status {id} pending_review</bash>
-  </step>
-
-  <step id="next">
-    <prompt lang="ja">概要を保存しました。機能リストの作成に進みますか？</prompt>
-    <prompt lang="en">Overview saved. Proceed to feature listing?</prompt>
+  <step id="confirm_overview">
+    <prompt lang="ja">この概要でよいですか？</prompt>
     <options>
-      <option>
-        <label lang="ja">はい、進める</label>
-        <label lang="en">Yes, continue</label>
-        <goto>feature_list_phase</goto>
-      </option>
-      <option>
-        <label lang="ja">いいえ、後で</label>
-        <label lang="en">No, later</label>
-        <action>Exit</action>
-      </option>
+      <option id="approve">はい、次へ進む / Yes, proceed</option>
+      <option id="modify">修正する / Modify</option>
     </options>
+    <conditional>
+      <branch condition="approve">
+        <bash>./scripts/blueprint-db-cli.sh add core overview app 'App Overview' '{content}'</bash>
+        <bash>./scripts/blueprint-db-cli.sh status {id} pending_review</bash>
+        <goto>feature_list_phase</goto>
+      </branch>
+      <branch condition="modify">
+        <prompt lang="ja">何を修正しますか？</prompt>
+        <goto>gather_additional_info</goto>
+      </branch>
+    </conditional>
   </step>
 </workflow>
 
 ---
 
-## Phase 2: Feature Listing (機能リストアップ)
+## Phase 2: Feature Listing
 
 <workflow name="feature_list_phase">
-  <step id="load_overview">
+  <step id="extract_features">
+    <description>Extract features from overview</description>
     <bash>./scripts/blueprint-db-cli.sh get core overview app</bash>
-    <action>Extract main_features from overview</action>
+    <action>Parse Features table from overview content</action>
   </step>
 
-  <step id="show_extracted">
-    <action>Display features extracted from overview</action>
-    <prompt lang="ja">概要から以下の機能を抽出しました。追加・修正はありますか？</prompt>
-    <prompt lang="en">Extracted these features from overview. Add or modify?</prompt>
-  </step>
-
-  <step id="categorize_features">
-    <description>For each feature, determine category and type</description>
+  <step id="categorize">
+    <description>Auto-categorize each feature</description>
     <mapping>
-      <pattern match="一覧|リスト|list|index">
-        <category>ui</category>
-        <type>pages</type>
-        <suffix>_list</suffix>
-      </pattern>
-      <pattern match="詳細|detail|show">
-        <category>ui</category>
-        <type>pages</type>
-        <suffix>_detail</suffix>
-      </pattern>
-      <pattern match="作成|登録|create|add">
-        <category>ui</category>
-        <type>pages</type>
-        <suffix>_create</suffix>
-      </pattern>
-      <pattern match="編集|更新|edit|update">
-        <category>ui</category>
-        <type>pages</type>
-        <suffix>_edit</suffix>
-      </pattern>
-      <pattern match="テーブル|モデル|table|model">
-        <category>data</category>
-        <type>tables</type>
-      </pattern>
-      <pattern match="通知|メール|notification|email">
-        <category>action</category>
-        <type>async</type>
-      </pattern>
-      <pattern match="定期|スケジュール|cron|scheduled">
-        <category>action</category>
-        <type>scheduled</type>
-      </pattern>
+      <rule pattern="list|index|一覧" category="ui" type="pages"/>
+      <rule pattern="detail|show|詳細" category="ui" type="pages"/>
+      <rule pattern="create|add|作成" category="ui" type="pages"/>
+      <rule pattern="edit|update|編集" category="ui" type="pages"/>
+      <rule pattern="table|model" category="data" type="tables"/>
+      <rule pattern="notify|email|通知" category="action" type="async"/>
     </mapping>
   </step>
 
-  <step id="confirm_features">
-    <action>Show categorized feature list as table</action>
-    <prompt lang="ja">この機能リストでよいですか？</prompt>
-    <prompt lang="en">Is this feature list correct?</prompt>
-    <options>
-      <option>
-        <label lang="ja">はい、このまま進める</label>
-        <label lang="en">Yes, proceed</label>
-      </option>
-      <option>
-        <label lang="ja">機能を追加</label>
-        <label lang="en">Add feature</label>
-        <goto>add_feature</goto>
-      </option>
-      <option>
-        <label lang="ja">機能を修正</label>
-        <label lang="en">Modify feature</label>
-        <goto>modify_feature</goto>
-      </option>
-    </options>
+  <step id="show_feature_list">
+    <action>Display categorized features as table</action>
+    <prompt lang="ja">以下の機能を作成します。追加・修正はありますか？</prompt>
+  </step>
+
+  <step id="validate_completeness">
+    <check>All routes from overview have corresponding specs</check>
+    <check>Data tables for all entities are included</check>
+    <check>CRUD operations are covered</check>
+    <conditional>
+      <branch condition="incomplete">
+        <prompt lang="ja">以下が不足しています：</prompt>
+        <list_missing/>
+        <prompt lang="ja">追加しますか？</prompt>
+      </branch>
+    </conditional>
   </step>
 
   <step id="save_features">
     <loop for_each="features">
       <bash>./scripts/blueprint-db-cli.sh add {category} {type} {slug} '{name}' '{minimal_json}'</bash>
-      <note>Save with minimal JSON (just name/description), details added in Definition phase</note>
     </loop>
   </step>
 
   <step id="setup_dependencies">
-    <description>Auto-detect and set dependencies</description>
-    <logic>
-      - UI pages depend on their data tables
-      - Actions depend on related models
-      - Detail/Edit pages depend on List page
-    </logic>
-    <loop for_each="specs_with_deps">
+    <description>Auto-detect dependencies</description>
+    <rules>
+      <rule>UI pages depend on their data tables</rule>
+      <rule>Detail/Edit pages depend on List page</rule>
+      <rule>Actions depend on related models</rule>
+    </rules>
+    <loop for_each="deps">
       <bash>./scripts/blueprint-db-cli.sh add-dep {spec_id} {blocked_by_id}</bash>
     </loop>
   </step>
-
-  <step id="next">
-    <prompt lang="ja">機能リストを保存しました。詳細定義に進みますか？</prompt>
-    <prompt lang="en">Feature list saved. Proceed to detailed definition?</prompt>
-    <goto>definition_phase</goto>
-  </step>
 </workflow>
 
 ---
 
-## Phase 3: Definition (詳細定義)
+## Phase 3: Definition
 
 <workflow name="definition_phase">
-  <step id="get_undefined">
+  <step id="get_draft_specs">
     <bash>./scripts/blueprint-db-cli.sh list-by-status draft</bash>
-    <action>Filter specs that need detailed definition</action>
-    <output>specs_to_define[]</output>
   </step>
 
-  <step id="show_progress">
-    <action>Show definition progress: X/Y specs defined</action>
-  </step>
-
-  <loop for_each="specs_to_define" item="spec">
-    <step id="show_spec">
-      <action>Display current spec: {spec.name}</action>
-      <prompt lang="ja">「{spec.name}」を詳細定義します</prompt>
-      <prompt lang="en">Defining "{spec.name}" in detail</prompt>
+  <loop for_each="draft_specs" item="spec">
+    <step id="define_spec">
+      <conditional>
+        <branch condition="type=tables">
+          <goto>define_table</goto>
+        </branch>
+        <branch condition="type=pages">
+          <goto>define_page</goto>
+        </branch>
+        <branch condition="type=sync|async|scheduled">
+          <goto>define_action</goto>
+        </branch>
+      </conditional>
     </step>
 
-    <conditional id="definition_by_type">
-      <branch condition="type=tables">
-        <goto>define_table</goto>
-      </branch>
-      <branch condition="type=pages">
-        <goto>define_page</goto>
-      </branch>
-      <branch condition="type=partials">
-        <goto>define_partial</goto>
-      </branch>
-      <branch condition="type=sync|async|scheduled">
-        <goto>define_action</goto>
-      </branch>
-      <branch condition="type=seeders">
-        <goto>define_seeder</goto>
-      </branch>
-    </conditional>
-
-    <step id="confirm_definition">
-      <action>Show generated JSON</action>
-      <prompt lang="ja">この定義でよいですか？</prompt>
-      <prompt lang="en">Is this definition correct?</prompt>
-      <options>
-        <option>
-          <label lang="ja">はい、保存して次へ</label>
-          <label lang="en">Yes, save and continue</label>
-        </option>
-        <option>
-          <label lang="ja">修正する</label>
-          <label lang="en">Modify</label>
-          <goto>definition_by_type</goto>
-        </option>
-        <option>
-          <label lang="ja">スキップ（後で定義）</label>
-          <label lang="en">Skip (define later)</label>
-        </option>
-      </options>
-    </step>
-
-    <step id="save_definition">
-      <bash>./scripts/blueprint-db-cli.sh update {spec.id} '{detailed_json}'</bash>
-      <bash>./scripts/blueprint-db-cli.sh status {spec.id} pending_review</bash>
+    <step id="quality_loop">
+      <description>Recursive refinement for each spec</description>
+      <action>Validate spec against quality criteria</action>
+      <conditional>
+        <branch condition="quality_score < 4">
+          <action>Identify issues</action>
+          <prompt lang="ja">「{spec.name}」について以下を明確にしてください：</prompt>
+          <list_issues/>
+          <goto>define_spec</goto>
+        </branch>
+        <branch condition="quality_score >= 4">
+          <action>Show final spec</action>
+          <bash>./scripts/blueprint-db-cli.sh update {spec.id} '{content}'</bash>
+          <bash>./scripts/blueprint-db-cli.sh status {spec.id} pending_review</bash>
+        </branch>
+      </conditional>
     </step>
   </loop>
-
-  <step id="all_defined">
-    <prompt lang="ja">全ての機能を定義しました。レビューに進みますか？</prompt>
-    <prompt lang="en">All features defined. Proceed to review?</prompt>
-    <goto>review_phase</goto>
-  </step>
 </workflow>
 
 ---
 
-### Define Table (テーブル定義)
+### Define Table
 
 <workflow name="define_table">
-  <step id="ask_columns">
-    <prompt lang="ja">テーブルのカラムを教えてください</prompt>
-    <prompt lang="en">What columns does this table have?</prompt>
-    <guide>
-      Example: name (string), email (string, unique), status (enum: active/inactive)
-    </guide>
-  </step>
+  <required_content>
+    ```markdown
+    # Table: {table_name}
 
-  <step id="ask_relations">
-    <prompt lang="ja">他のテーブルとの関連はありますか？</prompt>
-    <prompt lang="en">Are there relationships with other tables?</prompt>
-    <options multiSelect="true">
-      <option>belongsTo (親テーブル)</option>
-      <option>hasMany (子テーブル)</option>
-      <option>belongsToMany (多対多)</option>
-      <option>なし / None</option>
-    </options>
-  </step>
+    ## Columns
+    | Name | Type | Constraints | Description |
+    |------|------|-------------|-------------|
+    | id | bigint | PK, auto | Primary key |
+    | name | string(255) | required | ... |
 
-  <step id="ask_features">
-    <prompt lang="ja">追加機能は？</prompt>
-    <prompt lang="en">Additional features?</prompt>
-    <options multiSelect="true">
-      <option>timestamps (created_at, updated_at)</option>
-      <option>soft_delete (deleted_at)</option>
-      <option>uuid (ID as UUID)</option>
-    </options>
-  </step>
+    ## Relations
+    | Type | Target | Foreign Key | On Delete |
+    |------|--------|-------------|-----------|
+    | belongsTo | users | user_id | cascade |
 
-  <step id="generate_json">
-    <output>
-      {
-        "columns": [...],
-        "relations": [...],
-        "timestamps": true/false,
-        "soft_delete": true/false
-      }
-    </output>
-  </step>
+    ## Indexes
+    - status (for filtering)
+    - [user_id, created_at] (for user timeline)
+
+    ## Options
+    - timestamps: true
+    - soft_delete: false
+    ```
+  </required_content>
+
+  <quality_checks>
+    <check>All columns have type and description</check>
+    <check>Foreign keys have on_delete behavior</check>
+    <check>Indexes are defined for query patterns</check>
+  </quality_checks>
 </workflow>
 
 ---
 
-### Define Page (ページ定義)
+### Define Page
 
 <workflow name="define_page">
-  <step id="ask_route">
-    <prompt lang="ja">ルート（URL）は？</prompt>
-    <prompt lang="en">What is the route (URL)?</prompt>
-    <example>/users, /projects/{project}/tasks</example>
-  </step>
+  <required_content>
+    ```markdown
+    # Page: {page_name}
 
-  <step id="ask_auth">
-    <prompt lang="ja">認証は必要ですか？</prompt>
-    <prompt lang="en">Does it require authentication?</prompt>
-    <options>
-      <option>
-        <label lang="ja">はい、ログイン必須</label>
-        <label lang="en">Yes, login required</label>
-      </option>
-      <option>
-        <label lang="ja">いいえ、公開ページ</label>
-        <label lang="en">No, public page</label>
-      </option>
-    </options>
-  </step>
+    ## Route
+    - Path: /users
+    - Method: GET
+    - Auth: required
+    - Roles: [admin, user]
 
-  <step id="ask_roles" condition="auth=true">
-    <prompt lang="ja">アクセス可能なロールは？</prompt>
-    <prompt lang="en">Which roles can access?</prompt>
-    <options multiSelect="true">
-      <option>admin</option>
-      <option>user</option>
-      <option>guest</option>
-    </options>
-  </step>
+    ## Layout
+    - Template: app
+    - Title: User Management
 
-  <step id="ask_sections">
-    <prompt lang="ja">ページの構成要素は？（セクション）</prompt>
-    <prompt lang="en">What sections does the page have?</prompt>
-    <guide>
-      Examples:
-      - header: Page title and actions
-      - filter: Search/filter form
-      - table: Data table with pagination
-      - form: Input form
-      - card_grid: Grid of cards
-    </guide>
-  </step>
+    ## Sections
+    | Section | Type | Description |
+    |---------|------|-------------|
+    | header | header | Page title with "Add User" button |
+    | filters | form | Search by name, filter by status |
+    | table | data-table | Columns: name, email, status, actions |
 
-  <step id="ask_actions">
-    <prompt lang="ja">ユーザーアクションは？</prompt>
-    <prompt lang="en">What user actions are available?</prompt>
-    <guide>
-      Examples:
-      - create: Open create modal
-      - edit: Edit item
-      - delete: Delete with confirmation
-      - export: Export to CSV
-    </guide>
-  </step>
+    ## Actions
+    | Action | Trigger | Behavior |
+    |--------|---------|----------|
+    | create | click button | Open modal with form |
+    | edit | click row | Navigate to /users/{id}/edit |
+    | delete | click icon | Confirm dialog, then delete |
 
-  <step id="generate_json">
-    <output>
-      {
-        "route": "...",
-        "layout": "app",
-        "auth": true/false,
-        "roles": [...],
-        "sections": [...],
-        "actions": [...]
-      }
-    </output>
-  </step>
+    ## Data
+    - Source: User model
+    - Pagination: 20 per page
+    - Default sort: created_at desc
+    ```
+  </required_content>
+
+  <quality_checks>
+    <check>Route is fully specified</check>
+    <check>All sections have clear description</check>
+    <check>Actions have complete behavior</check>
+    <check>Data source and pagination defined</check>
+  </quality_checks>
 </workflow>
 
 ---
 
-### Define Action (アクション定義)
+### Define Action
 
 <workflow name="define_action">
-  <step id="ask_purpose">
-    <prompt lang="ja">このアクションは何をしますか？</prompt>
-    <prompt lang="en">What does this action do?</prompt>
-  </step>
+  <required_content>
+    ```markdown
+    # Action: {action_name}
 
-  <step id="ask_input">
-    <prompt lang="ja">入力パラメータは？</prompt>
-    <prompt lang="en">What are the input parameters?</prompt>
-    <guide>name (string, required), email (string, required), age (int, optional)</guide>
-  </step>
+    ## Purpose
+    {Clear description of what this action does}
 
-  <step id="ask_output">
-    <prompt lang="ja">戻り値は？</prompt>
-    <prompt lang="en">What is the return value?</prompt>
-    <options>
-      <option>Model instance</option>
-      <option>Boolean (success/failure)</option>
-      <option>Array/Collection</option>
-      <option>void (nothing)</option>
-    </options>
-  </step>
+    ## Input
+    | Parameter | Type | Required | Validation |
+    |-----------|------|----------|------------|
+    | name | string | yes | max:255 |
+    | email | string | yes | email, unique:users |
 
-  <step id="ask_events">
-    <prompt lang="ja">発火するイベントは？</prompt>
-    <prompt lang="en">What events should be dispatched?</prompt>
-    <example>UserCreated, OrderPlaced</example>
-  </step>
+    ## Process
+    1. Validate input
+    2. Create user record
+    3. Send welcome email
+    4. Dispatch UserCreated event
 
-  <step id="generate_json">
-    <output>
-      {
-        "name": "...",
-        "description": "...",
-        "input": [...],
-        "output": {...},
-        "events": [...]
-      }
-    </output>
-  </step>
+    ## Output
+    - Success: User model instance
+    - Failure: ValidationException
+
+    ## Events
+    - UserCreated: dispatched after creation
+
+    ## Side Effects
+    - Sends welcome email via queue
+    ```
+  </required_content>
+
+  <quality_checks>
+    <check>Input parameters fully typed</check>
+    <check>Process steps are clear</check>
+    <check>Output and errors defined</check>
+    <check>Side effects documented</check>
+  </quality_checks>
 </workflow>
 
 ---
 
-## Phase 4: Review (レビュー)
+## Phase 4: Review
 
 <workflow name="review_phase">
   <step id="get_pending">
     <bash>./scripts/blueprint-db-cli.sh pending-review</bash>
-    <output>pending_specs[]</output>
-  </step>
-
-  <step id="show_summary">
-    <action>Show pending specs count and list</action>
-    <prompt lang="ja">{count}件のスペックがレビュー待ちです</prompt>
-    <prompt lang="en">{count} specs pending review</prompt>
   </step>
 
   <loop for_each="pending_specs" item="spec">
-    <step id="show_spec_detail">
-      <bash>./scripts/blueprint-db-cli.sh get {spec.category} {spec.type} {spec.slug}</bash>
-      <action>Display formatted spec data</action>
+    <step id="show_spec">
+      <action>Display full spec content</action>
+      <action>Show quality score</action>
     </step>
 
-    <step id="ask_decision">
-      <prompt lang="ja">「{spec.name}」のレビュー結果は？</prompt>
-      <prompt lang="en">Review decision for "{spec.name}"?</prompt>
+    <step id="decision">
+      <prompt lang="ja">「{spec.name}」を承認しますか？</prompt>
       <options>
-        <option id="approve">
-          <label lang="ja">承認 → 実装可能に</label>
-          <label lang="en">Approve → Ready for implementation</label>
-        </option>
-        <option id="revise">
-          <label lang="ja">修正依頼</label>
-          <label lang="en">Request revision</label>
-        </option>
-        <option id="skip">
-          <label lang="ja">スキップ</label>
-          <label lang="en">Skip</label>
-        </option>
+        <option id="approve">承認 / Approve</option>
+        <option id="revise">修正依頼 / Request revision</option>
+        <option id="skip">スキップ / Skip</option>
       </options>
     </step>
 
-    <conditional id="handle_decision">
+    <conditional>
       <branch condition="approve">
         <bash>./scripts/blueprint-db-cli.sh status {spec.id} approved</bash>
         <bash>./scripts/blueprint-db-cli.sh reviewed {spec.id}</bash>
       </branch>
       <branch condition="revise">
         <prompt lang="ja">修正内容を教えてください</prompt>
-        <prompt lang="en">What needs to be changed?</prompt>
         <bash>./scripts/blueprint-db-cli.sh revision {spec.id} '{reason}'</bash>
-        <bash>./scripts/blueprint-db-cli.sh status {spec.id} needs_revision</bash>
-      </branch>
-      <branch condition="skip">
-        <action>Continue to next</action>
       </branch>
     </conditional>
   </loop>
 
-  <step id="review_complete">
-    <bash>./scripts/blueprint-db-cli.sh progress</bash>
+  <step id="completion_check">
     <conditional>
       <branch condition="all_approved">
-        <prompt lang="ja">全てのスペックが承認されました！ /hub で開発を開始できます</prompt>
-        <prompt lang="en">All specs approved! You can start development with /hub</prompt>
-      </branch>
-      <branch condition="has_pending">
-        <action>Show remaining pending/needs_revision specs</action>
+        <message lang="ja">全てのスペックが承認されました！ `/hub` で開発を開始できます</message>
       </branch>
     </conditional>
   </step>
@@ -599,220 +523,10 @@ Parse command argument:
 
 ---
 
-## Language Setting Flow
-
-<workflow name="set_language">
-  <step id="save">
-    <bash>echo "{lang}" > .blueprint-language</bash>
-  </step>
-  <step id="confirm">
-    <message lang="ja">言語を日本語に設定しました</message>
-    <message lang="en">Language set to English</message>
-  </step>
-</workflow>
-
----
-
-## Status State Machine
-
-<state_machine name="spec_status">
-  <state name="draft" type="initial">
-    <description>Created, needs definition</description>
-    <transition to="pending_review" trigger="definition_complete"/>
-  </state>
-
-  <state name="pending_review">
-    <description>Awaiting human review</description>
-    <transition to="approved" trigger="human_approves"/>
-    <transition to="needs_revision" trigger="human_requests_changes"/>
-  </state>
-
-  <state name="approved">
-    <description>Ready for implementation</description>
-    <transition to="in_progress" trigger="hub_locks"/>
-  </state>
-
-  <state name="in_progress">
-    <description>Being implemented</description>
-    <transition to="impl_review" trigger="coder_completes"/>
-    <transition to="blocked" trigger="coder_blocked"/>
-  </state>
-
-  <state name="impl_review">
-    <description>Implementation review</description>
-    <transition to="testing" trigger="human_approves"/>
-    <transition to="needs_revision" trigger="human_requests_changes"/>
-  </state>
-
-  <state name="testing">
-    <description>E2E testing</description>
-    <transition to="done" trigger="tests_pass"/>
-    <transition to="needs_revision" trigger="tests_fail"/>
-  </state>
-
-  <state name="needs_revision" type="recovery">
-    <description>Needs changes</description>
-    <transition to="pending_review" trigger="spec_updated"/>
-  </state>
-
-  <state name="blocked" type="recovery">
-    <description>Blocked by dependency</description>
-    <transition to="approved" trigger="dependency_resolved"/>
-  </state>
-
-  <state name="done" type="terminal">
-    <description>Complete</description>
-  </state>
-</state_machine>
-
----
-
-## Init/Develop/Pull Flows
-
-### Init Flow (`/blueprint init`)
-
-<workflow name="init">
-  <step id="select_stack">
-    <prompt>Which stack to use?</prompt>
-    <options>
-      - Laravel + Livewire (Recommended): Laravel 12, Livewire 4, Tailwind 4, daisyUI 5
-    </options>
-  </step>
-
-  <conditional id="check_submodule">
-    <branch condition="submodule_exists">
-      <bash>./.blueprint-flow/scripts/init.sh {stack}</bash>
-    </branch>
-    <branch condition="not_exists">
-      <bash>git submodule add https://github.com/tatun55/blueprint-flow .blueprint-flow</bash>
-      <bash>./.blueprint-flow/scripts/init.sh {stack}</bash>
-    </branch>
-  </conditional>
-</workflow>
-
-### Develop Flow (`/blueprint develop`)
-
-For improving blueprint-flow framework itself. See SPECIFICATION.md.
-
-### Pull Flow (`/blueprint pull`)
-
-<workflow name="pull_flow">
-  <description>Pull latest blueprint-flow from remote. Smart handling with changelog display.</description>
-
-  <step id="check_current_version">
-    <description>Get current version before pulling</description>
-    <bash>cat .blueprint-flow-version 2>/dev/null || echo "unknown"</bash>
-    <store as="old_version"/>
-    <bash>git -C .blueprint-flow log -1 --format="%h %s" 2>/dev/null || echo "Not a git repo"</bash>
-    <store as="old_commit_info"/>
-  </step>
-
-  <step id="pull_latest">
-    <description>Pull from remote</description>
-    <bash>cd .blueprint-flow && git pull origin main 2>&1 && cd ..</bash>
-    <conditional>
-      <branch condition="already_up_to_date">
-        <action>Report "Already up to date" and exit</action>
-      </branch>
-      <branch condition="pull_success">
-        <goto>show_changes</goto>
-      </branch>
-      <branch condition="pull_failed">
-        <action>Report error and exit</action>
-      </branch>
-    </conditional>
-  </step>
-
-  <step id="show_changes">
-    <description>Show what changed between versions</description>
-    <bash>git -C .blueprint-flow log {old_version}..HEAD --oneline 2>/dev/null | head -20</bash>
-    <bash>git -C .blueprint-flow diff --stat {old_version}..HEAD 2>/dev/null | tail -10</bash>
-    <action>Display changelog to user</action>
-  </step>
-
-  <step id="get_new_version">
-    <description>Get new version hash</description>
-    <bash>git -C .blueprint-flow rev-parse HEAD</bash>
-    <store as="new_version"/>
-  </step>
-
-  <step id="check_project_initialized">
-    <description>Check if project has been initialized with blueprint-flow</description>
-    <conditional>
-      <branch condition="file_exists(.blueprint-flow-stack)">
-        <goto>update_project_files</goto>
-      </branch>
-      <branch condition="not_exists">
-        <action>Skip update, just update version file</action>
-        <goto>update_version_file</goto>
-      </branch>
-    </conditional>
-  </step>
-
-  <step id="update_project_files">
-    <description>Try to update project files using update.sh</description>
-    <bash>./.blueprint-flow/scripts/update.sh . 2>&1</bash>
-    <conditional>
-      <branch condition="success">
-        <goto>report_success</goto>
-      </branch>
-      <branch condition="failed">
-        <action>Log warning: update.sh failed</action>
-        <goto>manual_update</goto>
-      </branch>
-    </conditional>
-  </step>
-
-  <step id="manual_update">
-    <description>Fallback: manually copy critical files if update.sh fails</description>
-    <action>Copy skill files directly</action>
-    <bash>cp .blueprint-flow/.claude/skills/blueprint/SKILL.md .claude/skills/blueprint/ 2>/dev/null || true</bash>
-    <bash>cp .blueprint-flow/.claude/skills/hub/SKILL.md .claude/skills/hub/ 2>/dev/null || true</bash>
-    <bash>cp .blueprint-flow/.claude/skills/e2e/SKILL.md .claude/skills/e2e/ 2>/dev/null || true</bash>
-    <action>Copy CLI scripts</action>
-    <bash>cp .blueprint-flow/scripts/blueprint-db-cli.sh scripts/ 2>/dev/null && chmod +x scripts/blueprint-db-cli.sh || true</bash>
-    <bash>cp .blueprint-flow/scripts/e2e-db-cli.sh scripts/ 2>/dev/null && chmod +x scripts/e2e-db-cli.sh || true</bash>
-    <goto>update_version_file</goto>
-  </step>
-
-  <step id="update_version_file">
-    <description>Update version file with new hash</description>
-    <bash>echo "{new_version}" > .blueprint-flow-version</bash>
-  </step>
-
-  <step id="report_success">
-    <description>Report results to user</description>
-    <output format="markdown">
-## Pull Complete
-
-| | Version |
-|---|---|
-| **Old** | `{old_version_short}` |
-| **New** | `{new_version_short}` |
-
-### Changes
-{changelog}
-
-### Updated Files
-{file_stats}
-    </output>
-  </step>
-</workflow>
-
-**Key improvements:**
-1. Shows changelog between versions (git log)
-2. Shows file diff stats (what files changed)
-3. Handles "already up to date" case
-4. Falls back to manual file copy if update.sh fails
-5. Always updates version file
-6. Works for both initialized and non-initialized projects
-
----
-
-## CLI Quick Reference
+## CLI Reference
 
 ```bash
-# Progress & Overview
+# Progress
 ./scripts/blueprint-db-cli.sh progress
 ./scripts/blueprint-db-cli.sh overview
 
@@ -822,27 +536,26 @@ For improving blueprint-flow framework itself. See SPECIFICATION.md.
 ./scripts/blueprint-db-cli.sh available-with-deps
 
 # CRUD
-./scripts/blueprint-db-cli.sh add {category} {type} {slug} '{name}' '{json}'
+./scripts/blueprint-db-cli.sh add {category} {type} {slug} '{name}' '{content}'
 ./scripts/blueprint-db-cli.sh get {category} {type} {slug}
-./scripts/blueprint-db-cli.sh update {id} '{json}'
+./scripts/blueprint-db-cli.sh update {id} '{content}'
 
 # Status
 ./scripts/blueprint-db-cli.sh status {id} {status}
 ./scripts/blueprint-db-cli.sh reviewed {id}
-./scripts/blueprint-db-cli.sh revision {id} '{reason}'
 
 # Dependencies
 ./scripts/blueprint-db-cli.sh add-dep {id} {blocked_by_id}
-./scripts/blueprint-db-cli.sh deps {id}
 ```
 
 ---
 
-## Rules
+## Rules Summary
 
-1. **Language**: Use configured language for all prompts
-2. **Resume**: Always detect current phase and offer to continue
-3. **AskUserQuestion**: Use at every decision point
-4. **Preview**: Show generated JSON before saving
-5. **Dependencies**: Auto-detect and set during feature listing
-6. **Validation**: Slugs must be lowercase with underscores only
+1. **Content Language**: Always English in specs
+2. **Interaction Language**: Configurable (default: Japanese)
+3. **Quality Threshold**: Score >= 4 to proceed
+4. **Recursive Refinement**: Keep asking until clear
+5. **No Placeholders**: TBD, TODO, ... are rejected
+6. **Complete Routes**: Every feature needs a route
+7. **Coding-Ready**: Implementable without questions

@@ -123,6 +123,63 @@ Spec = {
 | `ui` | pages, partials, layouts | UI層 |
 | `action` | sync, async, scheduled | ビジネスロジック |
 
+#### Spec Content Requirements (CRITICAL)
+
+Spec の `data` フィールドは以下の要件を満たす必要がある:
+
+| 要件 | 説明 |
+|------|------|
+| **Format** | Markdown (.md) 形式 |
+| **Language** | 英語のみ |
+| **Clarity** | 必要十分で曖昧さがない |
+| **Coding-ready** | 追加の質問なしで実装可能なレベル |
+
+**品質スコア**:
+
+| Score | Label | 説明 |
+|-------|-------|------|
+| 1 | Incomplete | 重要な情報が欠落 |
+| 2 | Vague | プレースホルダーや曖昧な表現あり |
+| 3 | Partial | 一部の詳細が不足 |
+| 4 | Clear | 実装可能なレベル（**閾値**） |
+| 5 | Excellent | エッジケースまで網羅 |
+
+**閾値**: Score 4 以上で次のフェーズに進める。4 未満の場合は再帰的に AskUserQuestion で詳細化する。
+
+**core/overview 必須項目**:
+
+```markdown
+# {App Name}
+
+## Description
+{アプリの目的と概要}
+
+## Target Users
+{ターゲットユーザーと目標}
+
+## User Roles
+| Role | Description | Permissions |
+|------|-------------|-------------|
+
+## Features
+| Feature | Description | Route | Priority |
+|---------|-------------|-------|----------|
+
+## Routes
+| Route | Page | Auth | Roles |
+|-------|------|------|-------|
+
+## Tech Stack
+- Backend: ...
+- Frontend: ...
+```
+
+**禁止事項**:
+- プレースホルダー (TBD, TODO, ...)
+- 曖昧な表現 ("etc.", "and more", "適宜")
+- ルートのない機能
+- 型のないカラム定義
+
 ### 2.2 Task (タスク)
 
 **定義**: どう作るかの命令的記述
