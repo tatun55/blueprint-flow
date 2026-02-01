@@ -48,15 +48,16 @@ cp "$BLUEPRINT_FLOW_DIR/.claude/skills/hub/SKILL.md" "$TARGET_DIR/.claude/skills
 cp "$BLUEPRINT_FLOW_DIR/.claude/skills/e2e/SKILL.md" "$TARGET_DIR/.claude/skills/e2e/"
 
 # Update CLI scripts (preserving databases)
-cp "$BLUEPRINT_FLOW_DIR/blueprint/db-cli.sh" "$TARGET_DIR/blueprint/"
+cp "$BLUEPRINT_FLOW_DIR/scripts/blueprint-db-cli.sh" "$TARGET_DIR/scripts/"
 cp "$BLUEPRINT_FLOW_DIR/blueprint/schema.sql" "$TARGET_DIR/blueprint/"
 cp "$BLUEPRINT_FLOW_DIR/blueprint/schema.dbml" "$TARGET_DIR/blueprint/"
-chmod +x "$TARGET_DIR/blueprint/db-cli.sh"
+chmod +x "$TARGET_DIR/scripts/blueprint-db-cli.sh"
 
-cp "$BLUEPRINT_FLOW_DIR/tests/e2e/db-cli.sh" "$TARGET_DIR/tests/e2e/"
-cp "$BLUEPRINT_FLOW_DIR/tests/e2e/schema.sql" "$TARGET_DIR/tests/e2e/"
-cp "$BLUEPRINT_FLOW_DIR/tests/e2e/schema.dbml" "$TARGET_DIR/tests/e2e/"
-chmod +x "$TARGET_DIR/tests/e2e/db-cli.sh"
+cp "$BLUEPRINT_FLOW_DIR/scripts/e2e-db-cli.sh" "$TARGET_DIR/scripts/"
+# e2e schema files may not exist in all setups
+cp "$BLUEPRINT_FLOW_DIR/tests/e2e/schema.sql" "$TARGET_DIR/tests/e2e/" 2>/dev/null || true
+cp "$BLUEPRINT_FLOW_DIR/tests/e2e/schema.dbml" "$TARGET_DIR/tests/e2e/" 2>/dev/null || true
+chmod +x "$TARGET_DIR/scripts/e2e-db-cli.sh"
 
 # Update stack patterns
 mkdir -p "$TARGET_DIR/stacks/$STACK"

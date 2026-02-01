@@ -696,10 +696,116 @@ For improving blueprint-flow framework itself. See SPECIFICATION.md.
 
 ### Pull Flow (`/blueprint pull`)
 
-```bash
-cd .blueprint-flow && git pull origin main && cd ..
-./.blueprint-flow/scripts/update.sh
-```
+<workflow name="pull_flow">
+  <description>Pull latest blueprint-flow from remote. Smart handling with changelog display.</description>
+
+  <step id="check_current_version">
+    <description>Get current version before pulling</description>
+    <bash>cat .blueprint-flow-version 2>/dev/null || echo "unknown"</bash>
+    <store as="old_version"/>
+    <bash>git -C .blueprint-flow log -1 --format="%h %s" 2>/dev/null || echo "Not a git repo"</bash>
+    <store as="old_commit_info"/>
+  </step>
+
+  <step id="pull_latest">
+    <description>Pull from remote</description>
+    <bash>cd .blueprint-flow && git pull origin main 2>&1 && cd ..</bash>
+    <conditional>
+      <branch condition="already_up_to_date">
+        <action>Report "Already up to date" and exit</action>
+      </branch>
+      <branch condition="pull_success">
+        <goto>show_changes</goto>
+      </branch>
+      <branch condition="pull_failed">
+        <action>Report error and exit</action>
+      </branch>
+    </conditional>
+  </step>
+
+  <step id="show_changes">
+    <description>Show what changed between versions</description>
+    <bash>git -C .blueprint-flow log {old_version}..HEAD --oneline 2>/dev/null | head -20</bash>
+    <bash>git -C .blueprint-flow diff --stat {old_version}..HEAD 2>/dev/null | tail -10</bash>
+    <action>Display changelog to user</action>
+  </step>
+
+  <step id="get_new_version">
+    <description>Get new version hash</description>
+    <bash>git -C .blueprint-flow rev-parse HEAD</bash>
+    <store as="new_version"/>
+  </step>
+
+  <step id="check_project_initialized">
+    <description>Check if project has been initialized with blueprint-flow</description>
+    <conditional>
+      <branch condition="file_exists(.blueprint-flow-stack)">
+        <goto>update_project_files</goto>
+      </branch>
+      <branch condition="not_exists">
+        <action>Skip update, just update version file</action>
+        <goto>update_version_file</goto>
+      </branch>
+    </conditional>
+  </step>
+
+  <step id="update_project_files">
+    <description>Try to update project files using update.sh</description>
+    <bash>./.blueprint-flow/scripts/update.sh . 2>&1</bash>
+    <conditional>
+      <branch condition="success">
+        <goto>report_success</goto>
+      </branch>
+      <branch condition="failed">
+        <action>Log warning: update.sh failed</action>
+        <goto>manual_update</goto>
+      </branch>
+    </conditional>
+  </step>
+
+  <step id="manual_update">
+    <description>Fallback: manually copy critical files if update.sh fails</description>
+    <action>Copy skill files directly</action>
+    <bash>cp .blueprint-flow/.claude/skills/blueprint/SKILL.md .claude/skills/blueprint/ 2>/dev/null || true</bash>
+    <bash>cp .blueprint-flow/.claude/skills/hub/SKILL.md .claude/skills/hub/ 2>/dev/null || true</bash>
+    <bash>cp .blueprint-flow/.claude/skills/e2e/SKILL.md .claude/skills/e2e/ 2>/dev/null || true</bash>
+    <action>Copy CLI scripts</action>
+    <bash>cp .blueprint-flow/scripts/blueprint-db-cli.sh scripts/ 2>/dev/null && chmod +x scripts/blueprint-db-cli.sh || true</bash>
+    <bash>cp .blueprint-flow/scripts/e2e-db-cli.sh scripts/ 2>/dev/null && chmod +x scripts/e2e-db-cli.sh || true</bash>
+    <goto>update_version_file</goto>
+  </step>
+
+  <step id="update_version_file">
+    <description>Update version file with new hash</description>
+    <bash>echo "{new_version}" > .blueprint-flow-version</bash>
+  </step>
+
+  <step id="report_success">
+    <description>Report results to user</description>
+    <output format="markdown">
+## Pull Complete
+
+| | Version |
+|---|---|
+| **Old** | `{old_version_short}` |
+| **New** | `{new_version_short}` |
+
+### Changes
+{changelog}
+
+### Updated Files
+{file_stats}
+    </output>
+  </step>
+</workflow>
+
+**Key improvements:**
+1. Shows changelog between versions (git log)
+2. Shows file diff stats (what files changed)
+3. Handles "already up to date" case
+4. Falls back to manual file copy if update.sh fails
+5. Always updates version file
+6. Works for both initialized and non-initialized projects
 
 ---
 
