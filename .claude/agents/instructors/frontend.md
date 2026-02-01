@@ -167,12 +167,12 @@ Route::get('{route}', \${COMPONENT_NAMESPACE}\Pages\{Feature}\{ClassName}::class
 - priority: 5
 
 ## Output Files
-- `${COMPONENT_PATH}/Components/{ClassName}.php`
-- `${VIEW_PATH}/components/{slug}.blade.php`
+- `${COMPONENT_PATH}/Partials/{ClassName}.php`
+- `${VIEW_PATH}/partials/{slug}.blade.php`
 
 ## Instructions
 
-### File: ${COMPONENT_PATH}/Components/{ClassName}.php
+### File: ${COMPONENT_PATH}/Partials/{ClassName}.php
 
 <template>
 {component_template}
@@ -184,7 +184,7 @@ Route::get('{route}', \${COMPONENT_NAMESPACE}\Pages\{Feature}\{ClassName}::class
 - Emit events via dispatch()
 </rules>
 
-### File: ${VIEW_PATH}/components/{slug}.blade.php
+### File: ${VIEW_PATH}/partials/{slug}.blade.php
 
 <template>
 <div>

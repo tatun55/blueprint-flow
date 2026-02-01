@@ -5,7 +5,7 @@
 | Type | Path | Example |
 |------|------|---------|
 | Pages | `app/Livewire/Pages/{Feature}/` | `Pages/Users/Index.php` |
-| Partials | `app/Livewire/Components/` | `Components/UserCard.php` |
+| Partials | `app/Livewire/Partials/` | `Partials/UserCard.php` |
 | Layouts | `app/Livewire/Layouts/` | `Layouts/App.php` |
 
 ```
@@ -15,7 +15,7 @@ app/Livewire/
 │   │   ├── Index.php
 │   │   └── Show.php
 │   └── Dashboard.php
-├── Components/
+├── Partials/
 │   └── ProjectSelector.php
 └── Layouts/
     └── App.php
@@ -32,7 +32,7 @@ resources/views/livewire/
 │   │   ├── index.blade.php
 │   │   └── show.blade.php
 │   └── dashboard.blade.php
-├── components/
+├── partials/
 │   └── project-selector.blade.php
 └── layouts/
     └── app.blade.php
