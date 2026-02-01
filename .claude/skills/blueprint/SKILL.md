@@ -550,6 +550,71 @@ cat .blueprint-language 2>/dev/null || echo "ja"
 
 ---
 
+## Pull Flow (`/blueprint pull`)
+
+<workflow name="pull_flow">
+  <description>Pull latest blueprint-flow. Single-command, no questions asked.</description>
+
+  <step id="execute_all">
+    <description>Run all steps in sequence with single output</description>
+    <bash>
+# Store project root (handle being called from any directory)
+PROJECT_ROOT="${PROJECT_ROOT:-$(pwd)}"
+cd "$PROJECT_ROOT"
+
+# Get current version
+OLD_VERSION=$(cat .blueprint-flow-version 2>/dev/null | head -c 7 || echo "unknown")
+
+# Pull latest
+cd .blueprint-flow
+PULL_OUTPUT=$(git pull origin main 2>&1)
+cd "$PROJECT_ROOT"
+
+# Check if already up to date
+if echo "$PULL_OUTPUT" | grep -q "Already up to date"; then
+  echo "✓ Already up to date ($OLD_VERSION)"
+  exit 0
+fi
+
+# Get new version
+NEW_VERSION=$(cd .blueprint-flow && git rev-parse HEAD | head -c 7)
+
+# Get changelog
+CHANGELOG=$(cd .blueprint-flow && git log ${OLD_VERSION}..HEAD --oneline 2>/dev/null | head -5)
+
+# Update project files
+./.blueprint-flow/scripts/update.sh . >/dev/null 2>&1
+
+# Clean up old backup folders
+rm -rf .blueprint-flow-backup-* 2>/dev/null
+
+# Output result
+echo "## Pull Complete"
+echo ""
+echo "| | Version |"
+echo "|---|---|"
+echo "| Old | \`$OLD_VERSION\` |"
+echo "| New | \`$NEW_VERSION\` |"
+echo ""
+echo "### Changes"
+echo "\`\`\`"
+echo "$CHANGELOG"
+echo "\`\`\`"
+echo ""
+echo "✓ Project files updated"
+echo "✓ Backup folders cleaned"
+    </bash>
+  </step>
+</workflow>
+
+**Key behaviors:**
+- Single command execution (no interactive prompts)
+- Auto-cleanup of `.blueprint-flow-backup-*` folders
+- Shows changelog between versions
+- Handles "already up to date" gracefully
+
+---
+
 ## Rules Summary
 
 1. **Content Language**: Always English in specs
