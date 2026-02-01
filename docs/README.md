@@ -90,7 +90,7 @@ blueprint-flow/
 
 ```bash
 # Add to your project
-git submodule add https://github.com/xxx/blueprint-flow .blueprint-flow
+git submodule add https://github.com/tatun55/blueprint-flow .blueprint-flow
 
 # Initialize with your stack
 ./.blueprint-flow/scripts/init.sh laravel

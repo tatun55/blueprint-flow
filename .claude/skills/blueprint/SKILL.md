@@ -39,7 +39,7 @@ If blueprint-flow is already a submodule:
 
 If not yet added:
 ```bash
-git submodule add https://github.com/xxx/blueprint-flow .blueprint-flow
+git submodule add https://github.com/tatun55/blueprint-flow .blueprint-flow
 ./.blueprint-flow/scripts/init.sh {stack}
 ```
 
