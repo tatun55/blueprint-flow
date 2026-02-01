@@ -114,41 +114,6 @@ public function onUserSelected(int $id): void
 
 ---
 
-## Alpine.js Patterns
-
-### Scope
-
-UI interactions only: dropdowns, modals, toggles, tooltips.
-Complex state/data: use Livewire.
-
-### Definition Style
-
-Use `Alpine.data()` registration in `app.js`:
-
-```js
-// resources/js/app.js
-import Alpine from 'alpinejs'
-
-Alpine.data('dropdown', () => ({
-    open: false,
-    toggle() { this.open = !this.open },
-    close() { this.open = false }
-}))
-
-Alpine.start()
-```
-
-```html
-<div x-data="dropdown">
-    <button x-on:click="toggle">Menu</button>
-    <div x-show="open" x-on:click.outside="close">...</div>
-</div>
-```
-
-**Forbidden:** Inline complex logic, external `<script>` function definitions.
-
----
-
 ## Migration Patterns
 
 ### Filename Convention

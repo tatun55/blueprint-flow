@@ -419,6 +419,86 @@ Usage: `<x-button variant="ghost">Cancel</x-button>`
 
 ---
 
+## Alpine.js
+
+### Scope
+
+UI interactions only: dropdowns, modals, toggles, tooltips.
+Complex state/data: use Livewire.
+
+### Default: Inline x-data
+
+Use inline `x-data` for simple interactions:
+
+```html
+<!-- Dropdown -->
+<div x-data="{ open: false }">
+    <button @click="open = !open">Menu</button>
+    <div x-show="open" @click.outside="open = false">
+        ...
+    </div>
+</div>
+
+<!-- Toggle -->
+<div x-data="{ expanded: false }">
+    <button @click="expanded = !expanded">
+        <span x-text="expanded ? 'Hide' : 'Show'"></span>
+    </button>
+    <div x-show="expanded" x-collapse>...</div>
+</div>
+
+<!-- Modal trigger -->
+<div x-data="{ show: false }">
+    <button @click="show = true">Open</button>
+    <dialog :class="{ 'modal-open': show }">...</dialog>
+</div>
+```
+
+### Complex Logic: Separate JS File
+
+Only for very complex interactions (10+ lines of logic):
+
+```js
+// resources/js/components/data-table.js
+export default () => ({
+    sortColumn: null,
+    sortDirection: 'asc',
+    filters: {},
+
+    sort(column) {
+        if (this.sortColumn === column) {
+            this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+        } else {
+            this.sortColumn = column;
+            this.sortDirection = 'asc';
+        }
+    },
+
+    // ... more complex logic
+})
+```
+
+```js
+// resources/js/app.js
+import Alpine from 'alpinejs'
+import dataTable from './components/data-table.js'
+
+Alpine.data('dataTable', dataTable)
+Alpine.start()
+```
+
+```html
+<div x-data="dataTable">...</div>
+```
+
+### Forbidden
+
+- External `<script>` function definitions
+- Complex logic inline (10+ lines)
+- State that should be in Livewire
+
+---
+
 ## Anti-Patterns
 
 ### Forbidden
