@@ -1,0 +1,53 @@
+#!/bin/bash
+# Blueprint Flow CLI
+# Usage: bpf <command> [args]
+#
+# Add to ~/.zshrc or ~/.bashrc:
+#   alias bpf="/path/to/.blueprint-flow/bpf"
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+show_help() {
+    cat << 'EOF'
+Blueprint Flow CLI
+
+Usage: bpf <command> [args]
+
+Commands:
+  create-project <name>    Create new Laravel project with full setup
+  init <stack>             Initialize blueprint-flow in current project
+  update                   Update blueprint-flow to latest
+
+Setup:
+  Add to ~/.zshrc or ~/.bashrc:
+    alias bpf="/path/to/.blueprint-flow/bpf"
+
+Examples:
+  bpf create-project my-todo-app
+  bpf init tall-daisy
+  bpf update
+EOF
+}
+
+case "${1:-}" in
+    create-project)
+        [[ -z "${2:-}" ]] && { echo "Usage: bpf create-project <project-name>"; exit 1; }
+        "$SCRIPT_DIR/scripts/create-project.sh" "$2"
+        ;;
+    init)
+        STACK="${2:-tall-daisy}"
+        "$SCRIPT_DIR/scripts/init.sh" "$STACK"
+        ;;
+    update)
+        "$SCRIPT_DIR/scripts/update.sh"
+        ;;
+    help|--help|-h)
+        show_help
+        ;;
+    *)
+        show_help
+        exit 1
+        ;;
+esac
