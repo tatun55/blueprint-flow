@@ -11,8 +11,9 @@ Human-in-the-loop spec management with blueprint-flow framework support.
 ## Command Routing
 
 Parse command argument:
-- `/blueprint init` → Initialize blueprint-flow
-- `/blueprint update` → Update blueprint-flow
+- `/blueprint init` → Initialize blueprint-flow in project
+- `/blueprint update` → Improve blueprint-flow framework (interactive)
+- `/blueprint sync` → Pull latest blueprint-flow from remote
 - `/blueprint` (no args) → Spec management
 
 ---
@@ -51,25 +52,127 @@ Show initialized files and next steps.
 
 ## Update Flow (`/blueprint update`)
 
+Interactive improvement of the blueprint-flow framework itself.
+
+### Step 1: Read Specification
+
+```bash
+# Read the full specification document
+Read: .blueprint-flow/docs/SPECIFICATION.md
+```
+
+Understand the current architecture, design principles, and extension points.
+
+### Step 2: Improvement Selection
+
+```
+AskUserQuestion:
+  question: "What would you like to improve?"
+  header: "Improve"
+  options:
+    - label: "Add New Feature"
+      description: "New capability (agent, skill, stack, etc.)"
+    - label: "Fix Bug"
+      description: "Correct an issue in existing functionality"
+    - label: "Refactor"
+      description: "Improve code quality without changing behavior"
+    - label: "Update Documentation"
+      description: "Improve SPECIFICATION.md or other docs"
+    - label: "Add New Stack"
+      description: "Support for a new framework (Rails, Next.js, etc.)"
+```
+
+### Step 3: Gather Details
+
+Ask follow-up questions based on selection:
+
+```
+AskUserQuestion:
+  question: "Describe the improvement in detail"
+  header: "Details"
+```
+
+### Step 4: Review Relevant Files
+
+Based on improvement type, read relevant files:
+
+| Improvement | Files to Read |
+|-------------|---------------|
+| Add Feature | Related SKILL.md, agent files |
+| Fix Bug | Affected component files |
+| Refactor | Target files |
+| Documentation | docs/*.md |
+| New Stack | stacks/laravel/* (as reference) |
+
+### Step 5: Propose Changes
+
+Show proposed changes to user:
+
+```
+AskUserQuestion:
+  question: "Proceed with these changes?"
+  header: "Confirm"
+  options:
+    - label: "Yes, apply changes"
+      description: "Make the changes and commit"
+    - label: "Modify approach"
+      description: "Discuss alternative approach"
+    - label: "Cancel"
+      description: "Abort without changes"
+```
+
+### Step 6: Apply Changes
+
+If approved:
+1. Make changes to files in `.blueprint-flow/`
+2. Update SPECIFICATION.md if architecture changed
+3. Update version in docs/SPECIFICATION.md
+
+### Step 7: Commit and Push
+
+```bash
+cd .blueprint-flow
+git add -A
+git commit -m "{descriptive message}
+
+Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>"
+git push origin main
+cd ..
+```
+
+### Step 8: Re-initialize Project
+
+```bash
+./.blueprint-flow/scripts/update.sh
+```
+
+Report changes applied and next steps.
+
+---
+
+## Sync Flow (`/blueprint sync`)
+
+Pull latest blueprint-flow from remote (no modifications).
+
 ### Step 1: Check Current Version
 
 ```bash
 cat .blueprint-flow-version
 ```
 
-### Step 2: Update Submodule
+### Step 2: Pull Latest
 
 ```bash
 cd .blueprint-flow && git pull origin main && cd ..
 ```
 
-### Step 3: Run Update Script
+### Step 3: Apply Updates
 
 ```bash
 ./.blueprint-flow/scripts/update.sh
 ```
 
-### Step 4: Report Changes
+### Step 4: Report
 
 Show old vs new version and any notable changes.
 
