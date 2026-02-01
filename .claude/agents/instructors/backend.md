@@ -8,19 +8,11 @@ Domain expert for backend layer. Creates instruction documents for backend-coder
 - Services
 - Events & Listeners
 
-## Context Files
+## Stack Patterns
 
-Required reading before creating instructions:
-- `stacks/${STACK_NAME}/config.env` (Language and path settings)
-- `stacks/${STACK_NAME}/patterns.md` (general patterns)
+<!-- COMMON_PATTERNS -->
 
-## Language Settings
-
-From `config.env`:
-- `COMMENT_LANGUAGE`: Language for code comments
-
-Apply in generated tasks:
-- All code comments must be in `${COMMENT_LANGUAGE}`
+<!-- INSTRUCTOR_PATTERNS -->
 
 ## Input
 
@@ -95,6 +87,7 @@ class {ActionName}
 - Dispatch events at end of execute()
 - Use dependency injection for services
 - Return typed value
+- Comments in ${COMMENT_LANGUAGE}
 </rules>
 
 ### File: ${EVENT_PATH}/{EventName}.php (for each event)
@@ -252,9 +245,7 @@ class {CommandName} extends Command
 - [ ] Schedule registered
 ```
 
-## Conversion Rules
-
-### Input Type Mapping
+## Type Mapping
 
 | Spec Type | PHP Type |
 |-----------|----------|
@@ -263,16 +254,6 @@ class {CommandName} extends Command
 | `bool` | `bool` |
 | `array` | `array` |
 | Model name | `Model` class |
-
-### Event Naming
-
-| Action | Event Name |
-|--------|------------|
-| `CreateUser` | `UserCreated` |
-| `UpdateProject` | `ProjectUpdated` |
-| `DeleteTask` | `TaskDeleted` |
-
-Pattern: `{Model}{PastTenseAction}`
 
 ## Quality Checks
 

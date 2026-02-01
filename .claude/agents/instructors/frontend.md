@@ -4,27 +4,15 @@ Domain expert for frontend layer. Creates instruction documents for frontend-cod
 
 ## Domain
 
-- UI components (Fullpage, Nested)
+- UI components (Fullpage, Partials)
 - Views
 - UI interactions
 
-## Context Files
+## Stack Patterns
 
-Required reading before creating instructions:
-- `stacks/${STACK_NAME}/config.env` (Language and path settings)
-- `stacks/${STACK_NAME}/patterns.md` (UI framework patterns)
-- `stacks/${STACK_NAME}/frontend.md` (Responsive, animation, UI patterns)
-- `stacks/${STACK_NAME}/structure.md` (Directory conventions)
+<!-- COMMON_PATTERNS -->
 
-## Language Settings
-
-From `config.env`:
-- `UI_LANGUAGE`: Language for UI text (labels, buttons, messages, placeholders)
-- `COMMENT_LANGUAGE`: Language for code comments
-
-Apply these settings in generated tasks:
-- All user-visible text must be in `${UI_LANGUAGE}`
-- All code comments must be in `${COMMENT_LANGUAGE}`
+<!-- INSTRUCTOR_PATTERNS -->
 
 ## Input
 
@@ -85,7 +73,7 @@ Route::get('{route}', \${COMPONENT_NAMESPACE}\Pages\{Feature}\{ClassName}::class
 - Use appropriate data binding (blur vs live)
 - Dispatch events for component communication
 - Use typed properties
-- Code comments in ${COMMENT_LANGUAGE}
+- Comments in ${COMMENT_LANGUAGE}
 </rules>
 
 ### File: ${VIEW_PATH}/pages/{feature}/{slug}.blade.php
@@ -100,51 +88,8 @@ Route::get('{route}', \${COMPONENT_NAMESPACE}\Pages\{Feature}\{ClassName}::class
 - Use ${UI_FRAMEWORK} classes
 - Use error directive for validation messages
 - Use ${JS_FRAMEWORK} for UI only (dropdowns, modals, toggles)
-- All UI text (labels, buttons, messages, placeholders) in ${UI_LANGUAGE}
+- All UI text in ${UI_LANGUAGE}
 </rules>
-
-## Section Templates
-
-### header
-```blade
-<div class="flex items-center justify-between mb-6">
-    <h1 class="text-2xl font-bold">{title}</h1>
-    <button class="btn btn-primary" wire:click="{action}">
-        {button_text}
-    </button>
-</div>
-```
-
-### table
-```blade
-<div class="overflow-x-auto">
-    <table class="table">
-        <thead>
-            <tr>
-                {headers}
-            </tr>
-        </thead>
-        <tbody>
-            @foreach($items as $item)
-            <tr>
-                {cells}
-            </tr>
-            @endforeach
-        </tbody>
-    </table>
-</div>
-```
-
-### form
-```blade
-<form wire:submit="save">
-    {fields}
-    <div class="flex gap-2 mt-4">
-        <button type="submit" class="btn btn-primary">Save</button>
-        <button type="button" class="btn btn-ghost" wire:click="cancel">Cancel</button>
-    </div>
-</form>
-```
 
 ## Validation
 - [ ] Component created at correct path
@@ -153,7 +98,7 @@ Route::get('{route}', \${COMPONENT_NAMESPACE}\Pages\{Feature}\{ClassName}::class
 - [ ] All sections from spec implemented
 - [ ] All actions from spec implemented
 - [ ] UI text in ${UI_LANGUAGE}
-- [ ] Code comments in ${COMMENT_LANGUAGE}
+- [ ] Comments in ${COMMENT_LANGUAGE}
 ```
 
 ### For partials (Nested Component)
@@ -243,25 +188,14 @@ Route::get('{route}', \${COMPONENT_NAMESPACE}\Pages\{Feature}\{ClassName}::class
 - [ ] Navigation elements present
 ```
 
-## Conversion Rules
-
-### Section Type to HTML
+## Section Type to HTML
 
 | Section Type | Template | Classes |
-|--------------|----------|---------|
+|--------------|----------|---------||
 | `header` | Title + action buttons | `text-2xl font-bold`, `btn btn-primary` |
 | `table` | Data table | `table`, `overflow-x-auto` |
 | `form` | Input form | `input input-bordered`, `btn` |
-| `content` | Custom content | Based on description |
 | `modal` | Dialog | `modal`, `modal-box` |
-
-### Action to Method
-
-| Trigger | Implementation |
-|---------|----------------|
-| `click` | `wire:click="methodName"` |
-| `submit` | `wire:submit="methodName"` |
-| `change` | `wire:change="methodName"` |
 
 ## Quality Checks
 
@@ -270,6 +204,5 @@ Before saving task to DB:
 2. All sections have HTML templates
 3. All actions have method signatures
 4. UI framework classes correct
-5. No forbidden patterns
-6. UI text language matches ${UI_LANGUAGE}
-7. Comment language matches ${COMMENT_LANGUAGE}
+5. UI text language matches ${UI_LANGUAGE}
+6. Comment language matches ${COMMENT_LANGUAGE}

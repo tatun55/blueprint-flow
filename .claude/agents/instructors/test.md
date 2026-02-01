@@ -8,10 +8,11 @@ Domain expert for E2E testing. Creates test case definitions based on UI specs.
 - Screenshot-based visual regression
 - Level-based test coverage
 
-## Context Files
+## Stack Patterns
 
-Required reading:
-- Spec data from blueprint.db
+<!-- COMMON_PATTERNS -->
+
+<!-- INSTRUCTOR_PATTERNS -->
 
 ## Input
 
@@ -34,14 +35,6 @@ Required reading:
 ## Output
 
 Task content saved to blueprint.db tasks table.
-
-## Level Definition
-
-| Level | Coverage | Content |
-|-------|----------|---------|
-| 1 | 20-40% | Main use cases (page display, primary actions) |
-| 2 | 40-60% | Additional interactions (form input, modals, etc.) |
-| 3 | 60%+ | All states & edge cases (errors, empty states, etc.) |
 
 ## Task Content Format
 

@@ -8,20 +8,11 @@ Domain expert for database layer. Creates instruction documents for db-coder.
 - Models
 - Seeders
 
-## Context Files
+## Stack Patterns
 
-Required reading before creating instructions:
-- `stacks/${STACK_NAME}/config.env` (Language and path settings)
-- `stacks/${STACK_NAME}/patterns.md` (Migration section, Seeder section)
-- `blueprint/schema.dbml` (for reference)
+<!-- COMMON_PATTERNS -->
 
-## Language Settings
-
-From `config.env`:
-- `COMMENT_LANGUAGE`: Language for code comments
-
-Apply in generated tasks:
-- All code comments must be in `${COMMENT_LANGUAGE}`
+<!-- INSTRUCTOR_PATTERNS -->
 
 ## Input
 
@@ -87,6 +78,7 @@ return new class extends Migration
 - Use foreignId()->constrained()->cascadeOnDelete() for FK
 - Add explicit index() for frequently queried columns
 - Column order: id, foreignId, required, optional, timestamps
+- Comments in ${COMMENT_LANGUAGE}
 </rules>
 
 ### File: ${MODEL_PATH}/{ModelName}.php
@@ -170,32 +162,6 @@ class {ModelName}Seeder extends Seeder
 - [ ] All fields from spec included
 - [ ] FK values exist in parent tables
 ```
-
-## Conversion Rules
-
-### Column Type Mapping
-
-| Spec Type | Migration Method |
-|-----------|-----------------|
-| `id` | `$table->id()` |
-| `string` | `$table->string('name')` |
-| `text` | `$table->text('name')` |
-| `integer` | `$table->integer('name')` |
-| `bigint` | `$table->bigInteger('name')` |
-| `boolean` | `$table->boolean('name')` |
-| `date` | `$table->date('name')` |
-| `datetime` | `$table->dateTime('name')` |
-| `json` | `$table->json('name')` |
-| `enum` | `$table->enum('name', [...])` |
-
-### Relation Mapping
-
-| Spec Relation | Model Method |
-|--------------|--------------|
-| `belongsTo` | `belongsTo(Model::class)` |
-| `hasMany` | `hasMany(Model::class)` |
-| `hasOne` | `hasOne(Model::class)` |
-| `belongsToMany` | `belongsToMany(Model::class)` |
 
 ## Quality Checks
 

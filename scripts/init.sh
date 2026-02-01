@@ -20,7 +20,7 @@ if [[ ! -d "$BLUEPRINT_FLOW_DIR/stacks/$STACK" ]]; then
 fi
 
 # Load stack config and export for envsubst
-set -a  # Auto-export all variables
+set -a
 source "$BLUEPRINT_FLOW_DIR/stacks/$STACK/config.env"
 set +a
 
@@ -33,12 +33,51 @@ mkdir -p "$TARGET_DIR/.claude/skills/hub"
 mkdir -p "$TARGET_DIR/.claude/skills/e2e"
 mkdir -p "$TARGET_DIR/blueprint"
 mkdir -p "$TARGET_DIR/tests/e2e/screenshots"
+mkdir -p "$TARGET_DIR/scripts"
 
-# Process and copy instructor files with variable substitution
+# Create temp files for patterns
+COMMON_FILE=$(mktemp)
+INSTRUCTOR_FILE=$(mktemp)
+trap "rm -f $COMMON_FILE $INSTRUCTOR_FILE" EXIT
+
+# Read common patterns
+if [[ -f "$BLUEPRINT_FLOW_DIR/stacks/$STACK/common/base.md" ]]; then
+    cat "$BLUEPRINT_FLOW_DIR/stacks/$STACK/common/base.md" > "$COMMON_FILE"
+else
+    echo "" > "$COMMON_FILE"
+fi
+
+# Function to generate instructor file with embedded patterns
+generate_instructor() {
+    local instructor_name="$1"
+    local template_file="$BLUEPRINT_FLOW_DIR/.claude/agents/instructors/${instructor_name}.md"
+    local patterns_file="$BLUEPRINT_FLOW_DIR/stacks/$STACK/instructors/${instructor_name}.md"
+    local output_file="$TARGET_DIR/.claude/agents/instructors/${instructor_name}.md"
+
+    # Read instructor-specific patterns if exists
+    if [[ -f "$patterns_file" ]]; then
+        cat "$patterns_file" > "$INSTRUCTOR_FILE"
+    else
+        echo "" > "$INSTRUCTOR_FILE"
+    fi
+
+    # Process template: replace placeholders, then envsubst for variables
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        if [[ "$line" == "<!-- COMMON_PATTERNS -->" ]]; then
+            cat "$COMMON_FILE"
+        elif [[ "$line" == "<!-- INSTRUCTOR_PATTERNS -->" ]]; then
+            cat "$INSTRUCTOR_FILE"
+        else
+            echo "$line"
+        fi
+    done < "$template_file" | envsubst > "$output_file"
+}
+
+# Generate instructor files with embedded patterns
 echo "Generating agent files..."
 for file in "$BLUEPRINT_FLOW_DIR/.claude/agents/instructors"/*.md; do
-    filename=$(basename "$file")
-    envsubst < "$file" > "$TARGET_DIR/.claude/agents/instructors/$filename"
+    filename=$(basename "$file" .md)
+    generate_instructor "$filename"
 done
 
 # Copy coder files (no substitution needed)
@@ -50,7 +89,6 @@ cp "$BLUEPRINT_FLOW_DIR/.claude/skills/hub/SKILL.md" "$TARGET_DIR/.claude/skills
 cp "$BLUEPRINT_FLOW_DIR/.claude/skills/e2e/SKILL.md" "$TARGET_DIR/.claude/skills/e2e/"
 
 # Copy CLI scripts
-mkdir -p "$TARGET_DIR/scripts"
 cp "$BLUEPRINT_FLOW_DIR/scripts/blueprint-db-cli.sh" "$TARGET_DIR/scripts/"
 cp "$BLUEPRINT_FLOW_DIR/scripts/e2e-db-cli.sh" "$TARGET_DIR/scripts/"
 chmod +x "$TARGET_DIR/scripts/blueprint-db-cli.sh"
@@ -64,11 +102,6 @@ cp "$BLUEPRINT_FLOW_DIR/blueprint/schema.dbml" "$TARGET_DIR/blueprint/"
 cp "$BLUEPRINT_FLOW_DIR/tests/e2e/schema.sql" "$TARGET_DIR/tests/e2e/"
 cp "$BLUEPRINT_FLOW_DIR/tests/e2e/schema.dbml" "$TARGET_DIR/tests/e2e/"
 
-# Copy stack-specific patterns
-mkdir -p "$TARGET_DIR/stacks/$STACK"
-cp "$BLUEPRINT_FLOW_DIR/stacks/$STACK"/*.md "$TARGET_DIR/stacks/$STACK/" 2>/dev/null || true
-cp "$BLUEPRINT_FLOW_DIR/stacks/$STACK/config.env" "$TARGET_DIR/stacks/$STACK/"
-
 # Initialize databases
 echo "Initializing databases..."
 "$TARGET_DIR/scripts/blueprint-db-cli.sh" init
@@ -79,10 +112,6 @@ if [[ ! -f "$TARGET_DIR/CLAUDE.md" ]]; then
     echo "Creating minimal CLAUDE.md..."
     cat > "$TARGET_DIR/CLAUDE.md" << 'CLAUDE_EOF'
 # Project Rules
-
-## Stack
-
-See: stacks/*/patterns.md
 
 ## Blueprint Flow
 
