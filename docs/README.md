@@ -19,7 +19,7 @@ Coder         → Pure execution: code based on task instructions only
 | Layer | Role | Context Size | Reads |
 |-------|------|--------------|-------|
 | **Hub** | Orchestrate | ~2k tokens | SKILL.md only |
-| **Instructor** | Create tasks | ~3k tokens | patterns.md + spec |
+| **Instructor** | Create tasks | ~3k tokens | embedded patterns + spec |
 | **Coder** | Execute | ~2k tokens | task content only |
 
 ### Why 3 Layers?
@@ -76,9 +76,14 @@ blueprint-flow/
 │   └── schema.dbml
 ├── stacks/
 │   └── tall-daisy/          # TALL + daisyUI stack patterns
-│       ├── config.env       # Path variables
-│       ├── patterns.md      # Code patterns
-│       └── structure.md     # Directory conventions
+│       ├── config.env       # Path/language variables
+│       ├── common/
+│       │   └── base.md      # Shared patterns (Livewire, daisyUI)
+│       └── instructors/
+│           ├── db.md        # Migration, Seeder patterns
+│           ├── frontend.md  # Responsive, Alpine.js patterns
+│           ├── backend.md   # Action, Event, Job patterns
+│           └── test.md      # E2E, Pest patterns
 └── docs/
     └── README.md            # This file
 ```
@@ -151,9 +156,9 @@ cd .blueprint-flow && git pull origin main && cd ..
 ## Adding New Stacks
 
 1. Create `stacks/{stack_name}/` directory
-2. Add `config.env` with path variables
-3. Add `patterns.md` with code patterns
-4. Add `structure.md` with directory conventions
+2. Add `config.env` with path/language variables
+3. Add `common/base.md` with shared patterns
+4. Add `instructors/{domain}.md` for each instructor
 5. Test with `./scripts/init.sh {stack_name}`
 
 ## Contributing

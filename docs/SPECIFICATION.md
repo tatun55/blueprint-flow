@@ -274,7 +274,7 @@ Human          Hub              Instructor           Coder              DB
   │             │ Task(db-instructor)│                  │                │
   │             │ ──────────────────►│                  │                │
   │             │                    │                  │                │
-  │             │                    │ Read patterns.md │                │
+  │             │                    │ (patterns embedded) │             │
   │             │                    │ Read spec data   │                │
   │             │                    │                  │                │
   │             │                    │ task-add         │                │
@@ -480,21 +480,20 @@ Human          Hub           Test Instructor       Test Coder         e2e.db
 
 **ファイル**: `.claude/agents/instructors/*.md`
 
-| Instructor | 読むファイル | 生成する Task |
-|------------|-------------|--------------|
-| db | patterns.md | migration, model, seeder |
-| frontend | patterns.md, frontend.md | component, view, route |
-| backend | patterns.md | action, job, command, event |
-| test | (none) | e2e test cases |
+| Instructor | パターン (埋め込み済み) | 生成する Task |
+|------------|------------------------|--------------|
+| db | common + db patterns | migration, model, seeder |
+| frontend | common + frontend patterns | component, view, route |
+| backend | common + backend patterns | action, job, command, event |
+| test | common + test patterns | e2e test cases |
 
 **Task 生成プロセス**:
 
 ```
 1. Spec を受け取る
-2. Context Files を読む
-3. Spec.data を解析
-4. Task content を生成
-5. blueprint.db に task-add
+2. Spec.data を解析 (パターンは定義に埋め込み済み)
+3. Task content を生成
+4. blueprint.db に task-add
 ```
 
 **品質チェック**:
@@ -513,7 +512,7 @@ Human          Hub           Test Instructor       Test Coder         e2e.db
 - バリデーション項目をチェック
 
 **しないこと**:
-- CLAUDE.md や patterns.md を読む
+- CLAUDE.md を読む
 - 設計判断
 - 指示にない機能追加
 - ルール変更
@@ -565,9 +564,11 @@ COMMENT_LANGUAGE="ja"   # Code comment language (ja, en, etc.)
 EOF
 
 # 3. パターンファイル作成
-# stacks/{stack_name}/patterns.md
-# stacks/{stack_name}/frontend.md (optional)
-# stacks/{stack_name}/structure.md
+# stacks/{stack_name}/common/base.md (共通パターン)
+# stacks/{stack_name}/instructors/db.md
+# stacks/{stack_name}/instructors/frontend.md
+# stacks/{stack_name}/instructors/backend.md
+# stacks/{stack_name}/instructors/test.md
 
 # 4. テスト
 ./scripts/init.sh {stack_name} /tmp/test-project
@@ -582,10 +583,11 @@ EOF
 - 担当範囲1
 - 担当範囲2
 
-## Context Files
-Required reading:
-- `stacks/${STACK_NAME}/patterns.md`
-- `stacks/${STACK_NAME}/{domain}.md` (if exists)
+## Stack Patterns
+
+<!-- COMMON_PATTERNS -->
+
+<!-- INSTRUCTOR_PATTERNS -->
 
 ## Input
 {Spec JSON 形式}
@@ -771,7 +773,7 @@ sqlite3 blueprint.db < migration_v2.sql
 | 変数が展開されない | init.sh で export されていない | `set -a` で auto-export |
 | ロックが解除されない | Hub がクラッシュ | 手動で `unlock` |
 | E2E がタイムアウト | ブラウザが起動しない | Playwright を再インストール |
-| Task が生成されない | Instructor がエラー | ログを確認、patterns.md をチェック |
+| Task が生成されない | Instructor がエラー | ログを確認、Instructor 定義をチェック |
 
 ### 10.2 デバッグコマンド
 
