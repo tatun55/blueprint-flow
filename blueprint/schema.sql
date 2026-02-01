@@ -11,11 +11,14 @@ CREATE TABLE IF NOT EXISTS specs (
     name TEXT NOT NULL,
     description TEXT,
 
-    -- Status workflow
-    status TEXT DEFAULT 'draft' CHECK(status IN ('draft', 'pending_review', 'approved', 'in_progress', 'impl_review', 'testing', 'done', 'needs_revision')),
+    -- Status workflow (added: blocked)
+    status TEXT DEFAULT 'draft' CHECK(status IN ('draft', 'pending_review', 'approved', 'in_progress', 'impl_review', 'testing', 'done', 'needs_revision', 'blocked')),
 
     -- Work assignment
     working_by TEXT,
+
+    -- Git worktree tracking
+    branch TEXT,
 
     -- Review tracking
     human_reviewed INTEGER DEFAULT 0,
@@ -26,7 +29,7 @@ CREATE TABLE IF NOT EXISTS specs (
     e2e_status TEXT DEFAULT NULL CHECK(e2e_status IS NULL OR e2e_status IN ('pending', 'passed', 'failed')),
     e2e_level INTEGER DEFAULT 1 CHECK(e2e_level BETWEEN 1 AND 3),
 
-    -- Ordering
+    -- Ordering (legacy, use spec_dependencies instead)
     wave INTEGER DEFAULT 1,
 
     -- Spec data
@@ -37,6 +40,16 @@ CREATE TABLE IF NOT EXISTS specs (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 
     UNIQUE(category, type, slug)
+);
+
+-- Dependency management (replaces wave for fine-grained control)
+CREATE TABLE IF NOT EXISTS spec_dependencies (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    spec_id INTEGER NOT NULL,
+    blocked_by_spec_id INTEGER NOT NULL,
+    FOREIGN KEY (spec_id) REFERENCES specs(id) ON DELETE CASCADE,
+    FOREIGN KEY (blocked_by_spec_id) REFERENCES specs(id) ON DELETE CASCADE,
+    UNIQUE(spec_id, blocked_by_spec_id)
 );
 
 -- Tasks table for storing instruction documents
@@ -55,10 +68,15 @@ CREATE INDEX IF NOT EXISTS idx_specs_status ON specs(status);
 CREATE INDEX IF NOT EXISTS idx_specs_wave ON specs(wave);
 CREATE INDEX IF NOT EXISTS idx_specs_working_by ON specs(working_by);
 CREATE INDEX IF NOT EXISTS idx_specs_e2e_status ON specs(e2e_status);
+CREATE INDEX IF NOT EXISTS idx_specs_branch ON specs(branch);
 
 -- Indexes for tasks
 CREATE INDEX IF NOT EXISTS idx_tasks_spec_id ON tasks(spec_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+
+-- Indexes for dependencies
+CREATE INDEX IF NOT EXISTS idx_deps_spec_id ON spec_dependencies(spec_id);
+CREATE INDEX IF NOT EXISTS idx_deps_blocked_by ON spec_dependencies(blocked_by_spec_id);
 
 -- Trigger: update updated_at
 CREATE TRIGGER IF NOT EXISTS specs_updated_at
@@ -67,11 +85,24 @@ BEGIN
     UPDATE specs SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
 END;
 
--- View: Available for implementation (approved, not locked)
+-- View: Available for implementation (approved, not locked, legacy wave-based)
 CREATE VIEW IF NOT EXISTS available_specs AS
 SELECT * FROM specs
 WHERE status = 'approved' AND working_by IS NULL
 ORDER BY wave, category, type;
+
+-- View: Available with dependencies resolved
+-- Returns specs that are approved, unlocked, and all dependencies are done
+CREATE VIEW IF NOT EXISTS available_with_deps AS
+SELECT s.* FROM specs s
+WHERE s.status = 'approved'
+  AND s.working_by IS NULL
+  AND NOT EXISTS (
+      SELECT 1 FROM spec_dependencies d
+      JOIN specs blocked ON d.blocked_by_spec_id = blocked.id
+      WHERE d.spec_id = s.id AND blocked.status != 'done'
+  )
+ORDER BY s.id;
 
 -- View: Currently in progress
 CREATE VIEW IF NOT EXISTS in_progress_specs AS
@@ -85,11 +116,25 @@ SELECT * FROM specs
 WHERE status IN ('pending_review', 'impl_review')
 ORDER BY updated_at ASC;
 
--- View: Needs attention (revision required)
+-- View: Needs attention (revision required or blocked)
 CREATE VIEW IF NOT EXISTS needs_attention_specs AS
 SELECT * FROM specs
-WHERE status = 'needs_revision'
+WHERE status IN ('needs_revision', 'blocked')
 ORDER BY updated_at DESC;
+
+-- View: Specs with their blocking dependencies
+CREATE VIEW IF NOT EXISTS spec_blockers AS
+SELECT
+    s.id,
+    s.slug,
+    s.status,
+    GROUP_CONCAT(blocked.slug) as blocked_by_slugs,
+    GROUP_CONCAT(blocked.id) as blocked_by_ids,
+    COUNT(CASE WHEN blocked.status != 'done' THEN 1 END) as pending_blockers
+FROM specs s
+LEFT JOIN spec_dependencies d ON s.id = d.spec_id
+LEFT JOIN specs blocked ON d.blocked_by_spec_id = blocked.id
+GROUP BY s.id;
 
 -- View: E2E testing pending
 CREATE VIEW IF NOT EXISTS e2e_pending_specs AS

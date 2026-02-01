@@ -18,11 +18,13 @@ Blueprint CLI Commands:
     progress                     Progress by status
 
   Status Views:
-    available                    Ready for implementation (approved, unlocked)
+    available                    Ready for implementation (wave-based, legacy)
+    available-with-deps          Ready with all dependencies resolved
     in-progress                  Currently being worked on
     pending-review               Awaiting human review
-    needs-attention              Needs revision
+    needs-attention              Needs revision or blocked
     e2e-pending                  Specs with pending E2E tests
+    blockers <id>                Show what blocks a spec
 
   Write:
     add <cat> <type> <slug> <name> '<json>'   Add new spec (status: draft)
@@ -32,6 +34,11 @@ Blueprint CLI Commands:
     revision <id> '<reason>'     Mark needs_revision with reason
     e2e-status <id> <status>     Set E2E status (pending/passed/failed)
     e2e-level <id> <level>       Set required E2E level (1-3)
+
+  Dependencies:
+    add-dep <id> <blocked_by_id> Add dependency (id is blocked by blocked_by_id)
+    remove-dep <id> <blocked_by_id>  Remove dependency
+    deps <id>                    Show dependencies for a spec
 
   Lock:
     lock <id> <worker>           Lock for working
@@ -58,8 +65,10 @@ Types:
 
 Status Flow:
   draft → pending_review → approved → in_progress → impl_review → testing → done
-                                              ↓
-                                      needs_revision
+                ↑                          ↓
+                └────── needs_revision ←───┘
+                              ↑
+                          blocked (dependency issue)
 EOF
 }
 
@@ -131,6 +140,29 @@ case "$1" in
         echo '{"success": true}'
         ;;
 
+    # Dependency commands
+    add-dep)
+        sqlite3 "$DB_PATH" "INSERT OR IGNORE INTO spec_dependencies (spec_id, blocked_by_spec_id) VALUES ($2, $3);"
+        echo '{"success": true}'
+        ;;
+
+    remove-dep)
+        sqlite3 "$DB_PATH" "DELETE FROM spec_dependencies WHERE spec_id = $2 AND blocked_by_spec_id = $3;"
+        echo '{"success": true}'
+        ;;
+
+    deps)
+        sqlite3 -json "$DB_PATH" "
+            SELECT
+                d.blocked_by_spec_id as id,
+                s.slug,
+                s.status
+            FROM spec_dependencies d
+            JOIN specs s ON d.blocked_by_spec_id = s.id
+            WHERE d.spec_id = $2;
+        "
+        ;;
+
     lock)
         sqlite3 "$DB_PATH" "UPDATE specs SET working_by = '$3', status = 'in_progress' WHERE id = $2 AND working_by IS NULL;"
         CHANGED=$(sqlite3 "$DB_PATH" "SELECT changes();")
@@ -144,6 +176,14 @@ case "$1" in
 
     available)
         sqlite3 -json "$DB_PATH" "SELECT * FROM available_specs;"
+        ;;
+
+    available-with-deps)
+        sqlite3 -json "$DB_PATH" "SELECT * FROM available_with_deps;"
+        ;;
+
+    blockers)
+        sqlite3 -json "$DB_PATH" "SELECT * FROM spec_blockers WHERE id = $2;"
         ;;
 
     in-progress)

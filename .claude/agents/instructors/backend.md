@@ -38,6 +38,18 @@ Domain expert for backend layer. Creates instruction documents for backend-coder
 
 Task content saved to blueprint.db tasks table.
 
+## Dependency Analysis
+
+Before generating task, check dependencies:
+
+```bash
+./scripts/blueprint-db-cli.sh deps {spec_id}
+```
+
+If dependencies exist and are not all `done`:
+1. Return `{"status": "blocked", "blocked_by": [ids]}`
+2. Do NOT generate task
+
 ## Instruction Template
 
 ### For sync actions
@@ -49,6 +61,12 @@ Task content saved to blueprint.db tasks table.
 - type: action_sync
 - spec_id: {spec_id}
 - priority: 4
+- blocked_by: [{dependency_ids}]
+
+## Worktree Setup
+- branch: task/spec-{spec_id}
+- command: `./scripts/worktree-manager.sh create {spec_id}`
+- working_dir: `.worktrees/spec-{spec_id}`
 
 ## Output Files
 - `${ACTION_PATH}/{ActionName}.php`
@@ -123,6 +141,23 @@ class {EventName}
 - [ ] Return type specified
 - [ ] Events created and dispatched
 - [ ] Validation logic if specified
+
+## Completion Flow
+1. All files created and validated
+2. In worktree: `git add -A && git commit -m "feat(action): add {ActionName}"`
+3. Push: `git push -u origin task/spec-{spec_id}`
+4. Create PR: `gh pr create --title "feat(action): {name}" --body "Spec ID: {spec_id}" --draft`
+5. Report: `{"status": "complete", "spec_id": {spec_id}, "pr_url": "...", "files": [...]}`
+
+## Error Flow
+If blocked or error occurs:
+1. Do NOT commit partial changes
+2. Report with details:
+   - `instruction_unclear`: Missing input/output definition
+   - `technical_error`: PHP syntax issue
+   - `dependency_missing`: Required model/service not found
+   - `file_conflict`: File already exists
+3. Example: `{"status": "blocked", "reason": "dependency_missing", "detail": "Model User not found"}`
 ```
 
 ### For async actions (Jobs)
@@ -134,6 +169,12 @@ class {EventName}
 - type: action_async
 - spec_id: {spec_id}
 - priority: 4
+- blocked_by: [{dependency_ids}]
+
+## Worktree Setup
+- branch: task/spec-{spec_id}
+- command: `./scripts/worktree-manager.sh create {spec_id}`
+- working_dir: `.worktrees/spec-{spec_id}`
 
 ## Output Files
 - `${JOB_PATH}/{JobName}.php`
@@ -185,6 +226,12 @@ class {JobName} implements ShouldQueue
 - [ ] Constructor accepts required data
 - [ ] handle() contains business logic
 - [ ] failed() handles errors
+
+## Completion Flow
+Same as sync actions - commit, push, create draft PR, report complete.
+
+## Error Flow
+Same as sync actions - report with reason and detail.
 ```
 
 ### For scheduled actions
@@ -196,6 +243,12 @@ class {JobName} implements ShouldQueue
 - type: action_scheduled
 - spec_id: {spec_id}
 - priority: 4
+- blocked_by: [{dependency_ids}]
+
+## Worktree Setup
+- branch: task/spec-{spec_id}
+- command: `./scripts/worktree-manager.sh create {spec_id}`
+- working_dir: `.worktrees/spec-{spec_id}`
 
 ## Output Files
 - `${COMMAND_PATH}/{CommandName}.php`
@@ -243,6 +296,12 @@ class {CommandName} extends Command
 - [ ] Description set
 - [ ] handle() returns proper exit code
 - [ ] Schedule registered
+
+## Completion Flow
+Same as sync actions - commit, push, create draft PR, report complete.
+
+## Error Flow
+Same as sync actions - report with reason and detail.
 ```
 
 ## Type Mapping

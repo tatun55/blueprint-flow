@@ -37,6 +37,18 @@ Domain expert for frontend layer. Creates instruction documents for frontend-cod
 
 Task content saved to blueprint.db tasks table.
 
+## Dependency Analysis
+
+Before generating task, check dependencies:
+
+```bash
+./scripts/blueprint-db-cli.sh deps {spec_id}
+```
+
+If dependencies exist and are not all `done`:
+1. Return `{"status": "blocked", "blocked_by": [ids]}`
+2. Do NOT generate task
+
 ## Instruction Template
 
 ### For pages (Fullpage Component)
@@ -48,6 +60,12 @@ Task content saved to blueprint.db tasks table.
 - type: page
 - spec_id: {spec_id}
 - priority: 5
+- blocked_by: [{dependency_ids}]
+
+## Worktree Setup
+- branch: task/spec-{spec_id}
+- command: `./scripts/worktree-manager.sh create {spec_id}`
+- working_dir: `.worktrees/spec-{spec_id}`
 
 ## Output Files
 - `${COMPONENT_PATH}/Pages/{Feature}/{ClassName}.php`
@@ -99,6 +117,23 @@ Route::get('{route}', \${COMPONENT_NAMESPACE}\Pages\{Feature}\{ClassName}::class
 - [ ] All actions from spec implemented
 - [ ] UI text in ${UI_LANGUAGE}
 - [ ] Comments in ${COMMENT_LANGUAGE}
+
+## Completion Flow
+1. All files created and validated
+2. In worktree: `git add -A && git commit -m "feat(ui): add {slug} page"`
+3. Push: `git push -u origin task/spec-{spec_id}`
+4. Create PR: `gh pr create --title "feat(ui): {name}" --body "Spec ID: {spec_id}" --draft`
+5. Report: `{"status": "complete", "spec_id": {spec_id}, "pr_url": "...", "files": [...]}`
+
+## Error Flow
+If blocked or error occurs:
+1. Do NOT commit partial changes
+2. Report with details:
+   - `instruction_unclear`: Missing section/action definition
+   - `technical_error`: Blade/PHP syntax issue
+   - `dependency_missing`: Required model/component not found
+   - `file_conflict`: File already exists
+3. Example: `{"status": "blocked", "reason": "dependency_missing", "detail": "Model User not found"}`
 ```
 
 ### For partials (Nested Component)
@@ -110,6 +145,12 @@ Route::get('{route}', \${COMPONENT_NAMESPACE}\Pages\{Feature}\{ClassName}::class
 - type: partial
 - spec_id: {spec_id}
 - priority: 5
+- blocked_by: [{dependency_ids}]
+
+## Worktree Setup
+- branch: task/spec-{spec_id}
+- command: `./scripts/worktree-manager.sh create {spec_id}`
+- working_dir: `.worktrees/spec-{spec_id}`
 
 ## Output Files
 - `${COMPONENT_PATH}/Partials/{ClassName}.php`
@@ -146,6 +187,12 @@ Route::get('{route}', \${COMPONENT_NAMESPACE}\Pages\{Feature}\{ClassName}::class
 - [ ] No layout attribute (nested components don't need it)
 - [ ] mount() accepts required props
 - [ ] Events properly dispatched/listened
+
+## Completion Flow
+Same as pages - commit, push, create draft PR, report complete.
+
+## Error Flow
+Same as pages - report with reason and detail.
 ```
 
 ### For layouts
@@ -157,6 +204,12 @@ Route::get('{route}', \${COMPONENT_NAMESPACE}\Pages\{Feature}\{ClassName}::class
 - type: layout
 - spec_id: {spec_id}
 - priority: 4
+- blocked_by: [{dependency_ids}]
+
+## Worktree Setup
+- branch: task/spec-{spec_id}
+- command: `./scripts/worktree-manager.sh create {spec_id}`
+- working_dir: `.worktrees/spec-{spec_id}`
 
 ## Output Files
 - `${COMPONENT_PATH}/Layouts/{ClassName}.php`
@@ -186,6 +239,12 @@ Route::get('{route}', \${COMPONENT_NAMESPACE}\Pages\{Feature}\{ClassName}::class
 - [ ] Layout component created
 - [ ] View includes slot for content
 - [ ] Navigation elements present
+
+## Completion Flow
+Same as pages - commit, push, create draft PR, report complete.
+
+## Error Flow
+Same as pages - report with reason and detail.
 ```
 
 ## Section Type to HTML

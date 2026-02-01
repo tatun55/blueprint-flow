@@ -13,7 +13,7 @@ allowed-tools: Bash, Task, AskUserQuestion
 | 責務 | 詳細 |
 |------|------|
 | ルーティング | Category → Instructor |
-| フロー管理 | Status 遷移、Wave 制御 |
+| フロー管理 | Status 遷移、依存関係制御 |
 | Review 調整 | AskUserQuestion |
 | E2E 進行 | Level 提案 |
 
@@ -22,6 +22,7 @@ allowed-tools: Bash, Task, AskUserQuestion
 - 専門知識の適用
 - task 内容の生成
 - コード生成
+- worktree操作（Coderの責務）
 
 ---
 
@@ -29,7 +30,7 @@ allowed-tools: Bash, Task, AskUserQuestion
 
 ```bash
 ./scripts/blueprint-db-cli.sh progress
-./scripts/blueprint-db-cli.sh available
+./scripts/blueprint-db-cli.sh available-with-deps
 ```
 
 ## Action Selection
@@ -40,9 +41,11 @@ AskUserQuestion:
   header: "Hub"
   options:
     - label: "Process Available Specs"
-      description: "Route approved specs to instructors"
+      description: "Route specs with resolved dependencies to instructors"
     - label: "Check Progress"
       description: "View current status"
+    - label: "Review Pending PRs"
+      description: "Review impl_review specs and merge"
     - label: "Advance E2E Level"
       description: "Propose next E2E level"
 ```
@@ -51,11 +54,16 @@ AskUserQuestion:
 
 ## Routing Flow
 
-### 1. Get Available Specs
+### 1. Get Available Specs (Dependency-Aware)
 
 ```bash
-./scripts/blueprint-db-cli.sh available
+./scripts/blueprint-db-cli.sh available-with-deps
 ```
+
+Returns specs that are:
+- Status = `approved`
+- Not locked (`working_by IS NULL`)
+- All dependencies are `done`
 
 ### 2. Determine Instructor
 
@@ -65,12 +73,15 @@ AskUserQuestion:
 | `ui` | frontend-instructor |
 | `action` | backend-instructor |
 
-### 3. Lock and Dispatch
+### 3. Lock and Dispatch (Parallel)
+
+For each available spec:
 
 ```bash
 ./scripts/blueprint-db-cli.sh lock {id} {instructor}-instructor
 ```
 
+Dispatch multiple Tasks in parallel:
 ```
 Task(
   description="Create {type} task instruction",
@@ -79,18 +90,19 @@ Task(
   You are {instructor}-instructor.
 
   Read: .claude/agents/instructors/{instructor}.md
-  Read: {context_files}
 
   Spec ID: {id}
   Spec: {json}
 
-  Create task content and save to blueprint.db:
-  ./scripts/blueprint-db-cli.sh task-add {spec_id} '{instructor}' '{content}'
+  1. Check dependencies: ./scripts/blueprint-db-cli.sh deps {id}
+  2. If all deps done, create task content
+  3. Save to DB: ./scripts/blueprint-db-cli.sh task-add {spec_id} '{instructor}' '{content}'
+  4. If blocked, return: {"status": "blocked", "blocked_by": [...]}
   """
 )
 ```
 
-### 4. Dispatch Coder
+### 4. Dispatch Coder (After Instructor Completes)
 
 ```bash
 # Get task id
@@ -108,26 +120,134 @@ Task(
 
   Get task: ./scripts/blueprint-db-cli.sh task-content {task_id}
 
-  Execute instructions. Create files.
-  Update: ./scripts/blueprint-db-cli.sh task-status {task_id} completed
+  Execute instructions:
+  1. Create worktree if specified
+  2. Create files
+  3. Commit and push
+  4. Create draft PR
+  5. Update: ./scripts/blueprint-db-cli.sh task-status {task_id} completed
+  6. Return: {"status": "complete", "pr_url": "...", "files": [...]}
   """
 )
 ```
 
-### 5. Request Review
+### 5. Handle Coder Result
 
+#### On Success
 ```bash
 ./scripts/blueprint-db-cli.sh status {id} impl_review
 ./scripts/blueprint-db-cli.sh unlock {id}
 ```
 
+#### On Error/Blocked
+```bash
+./scripts/blueprint-db-cli.sh status {id} blocked
+./scripts/blueprint-db-cli.sh unlock {id}
+```
+
+Notify user with error details.
+
+---
+
+## Human Review Flow
+
+### impl_review
+
+```bash
+./scripts/blueprint-db-cli.sh pending-review
+```
+
+For each spec in `impl_review`:
+
 ```
 AskUserQuestion:
-  question: "実装完了: {name}。コードを確認しますか?"
-  header: "Review"
+  question: "PR ready for review: {name}. What's your decision?"
+  header: "Code Review"
   options:
-    - label: "Approve for Testing"
+    - label: "Approve & Merge"
+      description: "Merge PR to main"
     - label: "Request Changes"
+      description: "Send back for revision"
+    - label: "Skip"
+      description: "Review later"
+```
+
+#### If Approved
+```bash
+./scripts/worktree-manager.sh merge {spec_id}
+./scripts/blueprint-db-cli.sh status {id} testing
+./scripts/blueprint-db-cli.sh reviewed {id}
+```
+
+#### If Request Changes
+```
+AskUserQuestion:
+  question: "What changes are needed?"
+  header: "Revision"
+```
+
+```bash
+./scripts/worktree-manager.sh abort {spec_id}
+./scripts/blueprint-db-cli.sh revision {id} '{reason}'
+```
+
+---
+
+## Error Recovery Flow
+
+### blocked specs
+
+```bash
+./scripts/blueprint-db-cli.sh needs-attention
+```
+
+For each blocked spec:
+
+```
+AskUserQuestion:
+  question: "Spec '{name}' is blocked. How to proceed?"
+  header: "Blocked"
+  options:
+    - label: "Add Missing Dependency"
+      description: "Create new spec for missing model/component"
+    - label: "Fix Spec"
+      description: "Update spec data"
+    - label: "Retry"
+      description: "Re-run instructor/coder"
+    - label: "Skip"
+      description: "Handle later"
+```
+
+---
+
+## Parallel Execution
+
+### Dependency-Based (Recommended)
+
+```bash
+# Get all specs that can run now
+./scripts/blueprint-db-cli.sh available-with-deps
+```
+
+Launch all available specs in parallel:
+```
+# Single message with multiple Task calls
+Task(description="db task for users", ...)
+Task(description="db task for projects", ...)
+Task(description="frontend task for login", ...)
+```
+
+After any spec completes:
+```bash
+# Check if new specs are now unblocked
+./scripts/blueprint-db-cli.sh available-with-deps
+```
+
+### Adding Dependencies
+
+When instructor reports blocked:
+```bash
+./scripts/blueprint-db-cli.sh add-dep {spec_id} {blocked_by_spec_id}
 ```
 
 ---
@@ -143,7 +263,6 @@ AskUserQuestion:
 ### Level 進行
 
 ```bash
-# Level 進捗確認
 ./scripts/blueprint-db-cli.sh e2e-progress
 ./scripts/e2e-db-cli.sh spec-summary {spec_id}
 ```
@@ -194,79 +313,31 @@ Task(
 
 ---
 
-## Parallel Execution
-
-### Wave 単位
-
-```bash
-# Wave N の approved specs
-./scripts/blueprint-db-cli.sh sql "SELECT * FROM specs WHERE wave = {N} AND status = 'approved'"
-```
-
-同一 Wave 内は並列で Task 起動:
-```
-# 単一メッセージで複数 Task
-Task(description="db task for users", ...)
-Task(description="db task for projects", ...)
-```
-
-### Wave 完了確認
-
-```bash
-./scripts/blueprint-db-cli.sh sql "SELECT COUNT(*) FROM specs WHERE wave = {N} AND status NOT IN ('done', 'testing')"
-```
-
-Count = 0 なら次 Wave へ。
-
----
-
-## Review Handling
-
-### impl_review
-
-要約コードを表示:
-```bash
-# 生成されたファイル一覧
-git status --porcelain
-```
-
-```
-AskUserQuestion:
-  question: "これらのファイルが生成されました。承認しますか?"
-  header: "Code Review"
-  options:
-    - label: "Approve"
-    - label: "Request Changes"
-```
-
-### needs_revision
-
-```
-AskUserQuestion:
-  question: "修正が必要です。どうしますか?"
-  header: "Revision"
-  options:
-    - label: "Update Spec"
-      description: "Spec を修正して Instructor から再実行"
-    - label: "Fix Code Only"
-      description: "task を修正して Coder のみ再実行"
-```
-
----
-
 ## Quick Commands
 
 ```bash
-# 進捗確認
+# Progress
 ./scripts/blueprint-db-cli.sh progress
 ./scripts/blueprint-db-cli.sh e2e-progress
 
-# 処理待ち
-./scripts/blueprint-db-cli.sh available
+# Available (dependency-aware)
+./scripts/blueprint-db-cli.sh available-with-deps
 ./scripts/blueprint-db-cli.sh pending-review
 ./scripts/blueprint-db-cli.sh e2e-pending
+./scripts/blueprint-db-cli.sh needs-attention
 
-# ステータス更新
+# Dependencies
+./scripts/blueprint-db-cli.sh deps {id}
+./scripts/blueprint-db-cli.sh blockers {id}
+./scripts/blueprint-db-cli.sh add-dep {id} {blocked_by_id}
+
+# Worktree
+./scripts/worktree-manager.sh list
+./scripts/worktree-manager.sh status {spec_id}
+./scripts/worktree-manager.sh merge {spec_id}
+./scripts/worktree-manager.sh abort {spec_id}
+
+# Status
 ./scripts/blueprint-db-cli.sh status {id} {status}
 ./scripts/blueprint-db-cli.sh e2e-status {id} passed
 ```

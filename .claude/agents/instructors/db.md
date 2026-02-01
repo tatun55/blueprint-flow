@@ -31,6 +31,18 @@ Domain expert for database layer. Creates instruction documents for db-coder.
 
 Task content saved to blueprint.db tasks table.
 
+## Dependency Analysis
+
+Before generating task, check dependencies:
+
+```bash
+./scripts/blueprint-db-cli.sh deps {spec_id}
+```
+
+If dependencies exist and are not all `done`:
+1. Return `{"status": "blocked", "blocked_by": [ids]}`
+2. Do NOT generate task
+
 ## Instruction Template
 
 ### For tables (Migration + Model)
@@ -42,6 +54,12 @@ Task content saved to blueprint.db tasks table.
 - type: migration_model
 - spec_id: {spec_id}
 - priority: 2
+- blocked_by: [{dependency_ids}]
+
+## Worktree Setup
+- branch: task/spec-{spec_id}
+- command: `./scripts/worktree-manager.sh create {spec_id}`
+- working_dir: `.worktrees/spec-{spec_id}`
 
 ## Output Files
 - `${MIGRATION_PATH}/0001_01_01_{number}_create_{table}_table.php`
@@ -114,6 +132,23 @@ class {ModelName} extends Model
 - [ ] All columns from spec included
 - [ ] All relations defined
 - [ ] $fillable includes all user-editable fields
+
+## Completion Flow
+1. All files created and validated
+2. In worktree: `git add -A && git commit -m "feat(db): add {table} migration and model"`
+3. Push: `git push -u origin task/spec-{spec_id}`
+4. Create PR: `gh pr create --title "feat(db): {name}" --body "Spec ID: {spec_id}" --draft`
+5. Report: `{"status": "complete", "spec_id": {spec_id}, "pr_url": "...", "files": [...]}`
+
+## Error Flow
+If blocked or error occurs:
+1. Do NOT commit partial changes
+2. Report with details:
+   - `instruction_unclear`: Missing or ambiguous spec data
+   - `technical_error`: Code/syntax issue (include error message)
+   - `dependency_missing`: Required table/model not found
+   - `file_conflict`: File already exists
+3. Example: `{"status": "blocked", "reason": "dependency_missing", "detail": "Model Project not found", "blocked_by_suggestion": [5]}`
 ```
 
 ### For seeders
@@ -125,6 +160,12 @@ class {ModelName} extends Model
 - type: seeder
 - spec_id: {spec_id}
 - priority: 3
+- blocked_by: [{dependency_ids}]
+
+## Worktree Setup
+- branch: task/spec-{spec_id}
+- command: `./scripts/worktree-manager.sh create {spec_id}`
+- working_dir: `.worktrees/spec-{spec_id}`
 
 ## Output Files
 - `${SEEDER_PATH}/Tables/{ModelName}Seeder.php`
@@ -161,6 +202,16 @@ class {ModelName}Seeder extends Seeder
 - [ ] Correct namespace
 - [ ] All fields from spec included
 - [ ] FK values exist in parent tables
+
+## Completion Flow
+1. All files created and validated
+2. In worktree: `git add -A && git commit -m "feat(db): add {ModelName} seeder"`
+3. Push: `git push -u origin task/spec-{spec_id}`
+4. Create PR: `gh pr create --title "feat(db): {name}" --body "Spec ID: {spec_id}" --draft`
+5. Report: `{"status": "complete", "spec_id": {spec_id}, "pr_url": "...", "files": [...]}`
+
+## Error Flow
+Same as tables - report with reason and detail.
 ```
 
 ## Quality Checks

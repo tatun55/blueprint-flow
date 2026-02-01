@@ -8,8 +8,8 @@ Blueprint Flow provides a structured, human-in-the-loop development workflow:
 
 ```
 Hub Layer     → Lightweight: routing, flow management, review coordination
-Instructor    → Domain experts: create task instructions
-Coder         → Pure execution: code based on task instructions only
+Instructor    → Domain experts: create task instructions (with worktree setup)
+Coder         → Pure execution: code in isolated worktree, commit, create PR
 ```
 
 ## Architecture
@@ -34,15 +34,70 @@ Token efficiency through context isolation:
 ```
 1. Human creates spec (via /blueprint)
 2. Human reviews and approves spec
-3. Hub routes spec to appropriate Instructor
-4. Instructor creates detailed task (saved to DB)
-5. Hub dispatches task to Coder
-6. Coder executes task
-7. Human reviews implementation
-8. Hub triggers E2E tests (for UI specs)
-9. Human reviews test results
-10. Spec marked as done
+3. Hub checks dependencies (available-with-deps)
+4. Hub routes spec to appropriate Instructor
+5. Instructor creates detailed task with worktree instructions
+6. Hub dispatches task to Coder
+7. Coder creates worktree, executes task, commits, creates PR
+8. Human reviews PR (impl_review)
+9. If approved: Hub merges worktree to main
+10. Hub triggers E2E tests (for UI specs)
+11. Human reviews test results
+12. Spec marked as done
 ```
+
+## Key Features
+
+### Dependency Management (blockedBy)
+
+Fine-grained dependency control instead of wave-based ordering:
+
+```bash
+# Add dependency: spec 5 is blocked by spec 3
+./scripts/blueprint-db-cli.sh add-dep 5 3
+
+# Get available specs (only those with all deps resolved)
+./scripts/blueprint-db-cli.sh available-with-deps
+
+# Check what blocks a spec
+./scripts/blueprint-db-cli.sh blockers 5
+```
+
+### Git Worktree Isolation
+
+Each spec executes in its own worktree for parallel, conflict-free development:
+
+```bash
+# Create worktree for spec
+./scripts/worktree-manager.sh create {spec_id}
+
+# After PR approval, merge to main
+./scripts/worktree-manager.sh merge {spec_id}
+
+# If rejected, discard all changes
+./scripts/worktree-manager.sh abort {spec_id}
+```
+
+Benefits:
+- Parallel execution without file conflicts
+- Safe rollback (just delete worktree)
+- Clean PR-based review workflow
+- Conflict detection at merge time
+
+### Error Handling
+
+Coders report errors with structured format:
+
+```json
+{
+  "status": "blocked",
+  "reason": "dependency_missing",
+  "detail": "Model Project not found",
+  "blocked_by_suggestion": [5]
+}
+```
+
+Error types: `instruction_unclear`, `technical_error`, `dependency_missing`, `file_conflict`
 
 ## Directory Structure
 
@@ -67,9 +122,11 @@ blueprint-flow/
 ├── scripts/
 │   ├── blueprint-db-cli.sh  # Spec management CLI
 │   ├── e2e-db-cli.sh        # E2E test CLI
-│   └── init.sh              # Project initialization
+│   ├── worktree-manager.sh  # Git worktree operations
+│   ├── init.sh              # Project initialization
+│   └── update.sh            # Update script
 ├── blueprint/
-│   ├── schema.sql           # SQLite schema
+│   ├── schema.sql           # SQLite schema (specs, dependencies, tasks)
 │   └── schema.dbml          # DBML documentation
 ├── tests/e2e/
 │   ├── schema.sql
@@ -131,10 +188,12 @@ cd .blueprint-flow && git pull origin main && cd ..
 ### Workflow
 
 1. **Create Specs**: Use `/blueprint` to define what you want to build
-2. **Review Specs**: Approve or request changes
-3. **Run Hub**: Use `/hub` to process approved specs
-4. **Review Implementation**: Check generated code
-5. **Run E2E**: Test UI components with screenshots
+2. **Set Dependencies**: Add blockedBy relationships between specs
+3. **Review Specs**: Approve or request changes
+4. **Run Hub**: Use `/hub` to process approved specs (parallel execution)
+5. **Review PRs**: Check generated code in draft PRs
+6. **Merge**: Approve to merge worktrees to main
+7. **Run E2E**: Test UI components with screenshots
 
 ## Spec Categories
 
@@ -144,6 +203,30 @@ cd .blueprint-flow && git pull origin main && cd ..
 | `data` | tables, seeders | db | No |
 | `ui` | pages, partials, layouts | frontend | pages, layouts |
 | `action` | sync, async, scheduled | backend | No |
+
+## CLI Quick Reference
+
+```bash
+# Progress
+./scripts/blueprint-db-cli.sh progress
+./scripts/blueprint-db-cli.sh overview
+
+# Available (dependency-aware)
+./scripts/blueprint-db-cli.sh available-with-deps
+./scripts/blueprint-db-cli.sh pending-review
+./scripts/blueprint-db-cli.sh needs-attention
+
+# Dependencies
+./scripts/blueprint-db-cli.sh add-dep {spec_id} {blocked_by_id}
+./scripts/blueprint-db-cli.sh deps {spec_id}
+./scripts/blueprint-db-cli.sh blockers {spec_id}
+
+# Worktree
+./scripts/worktree-manager.sh list
+./scripts/worktree-manager.sh status {spec_id}
+./scripts/worktree-manager.sh merge {spec_id}
+./scripts/worktree-manager.sh abort {spec_id}
+```
 
 ## E2E Test Levels
 
