@@ -66,13 +66,26 @@ The `core/overview` spec MUST include:
 
 ### Livewire UI Pattern (CRITICAL)
 
-For interactive UIs like Livewire, **CRUD operations happen within the page**, not as separate pages or actions.
+For interactive UIs like Livewire, **operations happen within the page via modals**, not as separate pages.
 
-<principle name="in_page_crud">
-  <rule>CRUD operations are defined as **page sections**, not separate specs</rule>
-  <rule>Create/Edit forms appear as **modals or slide-overs** within the list page</rule>
-  <rule>Delete uses **confirmation dialog** within the page</rule>
-  <rule>Only define **separate pages** when truly needed (e.g., complex detail view)</rule>
+<principle name="single_page_with_modals">
+  <philosophy>
+    Usability-first design: Users stay on one page and perform various operations
+    through modals, slide-overs, and inline interactions. This reduces context
+    switching and provides a smoother experience.
+  </philosophy>
+
+  <rule>CRUD and related operations are defined as **page sections**, not separate specs</rule>
+  <rule>Create/Edit/View forms appear as **modals or slide-overs** within the page</rule>
+  <rule>Delete, export, bulk actions use **confirmation dialogs**</rule>
+  <rule>Only define **separate pages** when truly needed (e.g., complex multi-step wizard)</rule>
+
+  <balance>
+    Keep modal complexity reasonable. If a modal requires:
+    - Multiple tabs or complex navigation → Consider separate page
+    - Heavy data loading or long forms → Consider slide-over panel
+    - Simple confirmation or quick edit → Modal is ideal
+  </balance>
 </principle>
 
 **Correct Pattern:**
@@ -115,9 +128,14 @@ Only create `action/*` specs for:
 | `data-table` | List with columns and row actions | User list with edit/delete |
 | `create-modal` | Modal form for creating | New user form |
 | `edit-modal` | Modal form for editing | Edit user form |
+| `view-modal` | Modal for viewing details | User profile quick view |
 | `delete-confirm` | Delete confirmation dialog | "Are you sure?" |
-| `detail-panel` | Slide-over or panel for details | User details |
+| `action-confirm` | Confirmation for other actions | "Export 100 users?" |
+| `bulk-actions` | Toolbar for selected items | Delete selected, Export selected |
+| `detail-panel` | Slide-over for complex details | User details with tabs |
 | `form` | Standalone form (non-modal) | Settings form |
+| `import-modal` | File upload and import | CSV import |
+| `export-modal` | Export options | Choose format, columns |
 
 ---
 
