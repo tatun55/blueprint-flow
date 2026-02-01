@@ -18,6 +18,7 @@ Blueprint CLI Commands:
     progress                     Progress by status
 
   Status Views:
+    list-by-status <status>      List specs by status
     available                    Ready for implementation (wave-based, legacy)
     available-with-deps          Ready with all dependencies resolved
     in-progress                  Currently being worked on
@@ -200,6 +201,10 @@ case "$1" in
 
     e2e-pending)
         sqlite3 -json "$DB_PATH" "SELECT * FROM e2e_pending_specs;"
+        ;;
+
+    list-by-status)
+        sqlite3 -json "$DB_PATH" "SELECT id, category, type, slug, name, status, working_by, wave, human_reviewed, e2e_status, e2e_level FROM specs WHERE status = '$2' ORDER BY wave, category, type;"
         ;;
 
     overview)
