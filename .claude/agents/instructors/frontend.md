@@ -12,6 +12,7 @@ Domain expert for frontend layer. Creates instruction documents for frontend-cod
 
 Required reading before creating instructions:
 - `stacks/${STACK_NAME}/patterns.md` (UI framework patterns)
+- `stacks/${STACK_NAME}/frontend.md` (Responsive, animation, UI patterns)
 - `stacks/${STACK_NAME}/structure.md` (Directory conventions)
 
 ## Input

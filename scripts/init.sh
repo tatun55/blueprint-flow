@@ -19,8 +19,10 @@ if [[ ! -d "$BLUEPRINT_FLOW_DIR/stacks/$STACK" ]]; then
     exit 1
 fi
 
-# Load stack config
+# Load stack config and export for envsubst
+set -a  # Auto-export all variables
 source "$BLUEPRINT_FLOW_DIR/stacks/$STACK/config.env"
+set +a
 
 # Create directories
 echo "Creating directories..."
