@@ -1,9 +1,12 @@
 #!/bin/bash
 # E2E Test CLI
-# Usage: ./db-cli.sh <command> [args]
+# Usage: ./scripts/e2e-db-cli.sh <command> [args]
 
-DB_PATH="$(dirname "$0")/e2e.db"
-SCREENSHOT_DIR="$(dirname "$0")/screenshots"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+DB_PATH="$PROJECT_ROOT/tests/e2e/e2e.db"
+SCHEMA_PATH="$PROJECT_ROOT/tests/e2e/schema.sql"
+SCREENSHOT_DIR="$PROJECT_ROOT/tests/e2e/screenshots"
 
 show_help() {
     cat << 'EOF'
@@ -152,15 +155,16 @@ case "$1" in
         ;;
 
     init)
-        sqlite3 "$DB_PATH" < "$(dirname "$0")/schema.sql"
+        mkdir -p "$(dirname "$DB_PATH")"
         mkdir -p "$SCREENSHOT_DIR"
+        sqlite3 "$DB_PATH" < "$SCHEMA_PATH"
         echo '{"success": true, "message": "E2E database initialized"}'
         ;;
 
     reset)
         rm -f "$DB_PATH"
-        sqlite3 "$DB_PATH" < "$(dirname "$0")/schema.sql"
         mkdir -p "$SCREENSHOT_DIR"
+        sqlite3 "$DB_PATH" < "$SCHEMA_PATH"
         echo '{"success": true, "message": "E2E database reset"}'
         ;;
 

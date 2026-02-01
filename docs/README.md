@@ -64,12 +64,14 @@ blueprint-flow/
 │       ├── blueprint/       # Spec management
 │       ├── hub/             # Orchestrator
 │       └── e2e/             # E2E testing
+├── scripts/
+│   ├── blueprint-db-cli.sh  # Spec management CLI
+│   ├── e2e-db-cli.sh        # E2E test CLI
+│   └── init.sh              # Project initialization
 ├── blueprint/
-│   ├── db-cli.sh            # Spec management CLI
 │   ├── schema.sql           # SQLite schema
 │   └── schema.dbml          # DBML documentation
 ├── tests/e2e/
-│   ├── db-cli.sh            # E2E test CLI
 │   ├── schema.sql
 │   └── schema.dbml
 ├── stacks/
@@ -77,9 +79,6 @@ blueprint-flow/
 │       ├── config.env       # Path variables
 │       ├── patterns.md      # Code patterns
 │       └── structure.md     # Directory conventions
-├── scripts/
-│   ├── init.sh              # Project initialization
-│   └── update.sh            # Update to latest
 └── docs/
     └── README.md            # This file
 ```

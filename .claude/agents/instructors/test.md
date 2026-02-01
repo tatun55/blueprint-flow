@@ -79,7 +79,7 @@ Task content saved to blueprint.db tasks table.
 
 For each case, register in e2e.db:
 ```bash
-./tests/e2e/db-cli.sh add {slug} "{name}" "{url}" 1280x720 {spec_id} {level}
+./scripts/e2e-db-cli.sh add {slug} "{name}" "{url}" 1280x720 {spec_id} {level}
 ```
 
 ## Screenshots

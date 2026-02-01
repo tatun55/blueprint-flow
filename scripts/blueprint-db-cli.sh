@@ -1,8 +1,11 @@
 #!/bin/bash
 # Blueprint CLI - Spec Management with Review Workflow
-# Usage: ./db-cli.sh <command> [args]
+# Usage: ./scripts/blueprint-db-cli.sh <command> [args]
 
-DB_PATH="$(dirname "$0")/blueprint.db"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+DB_PATH="$PROJECT_ROOT/blueprint/blueprint.db"
+SCHEMA_PATH="$PROJECT_ROOT/blueprint/schema.sql"
 
 show_help() {
     cat << 'EOF'
@@ -203,13 +206,14 @@ case "$1" in
         ;;
 
     init)
-        sqlite3 "$DB_PATH" < "$(dirname "$0")/schema.sql"
+        mkdir -p "$(dirname "$DB_PATH")"
+        sqlite3 "$DB_PATH" < "$SCHEMA_PATH"
         echo '{"success": true, "message": "Database initialized"}'
         ;;
 
     reset)
         rm -f "$DB_PATH"
-        sqlite3 "$DB_PATH" < "$(dirname "$0")/schema.sql"
+        sqlite3 "$DB_PATH" < "$SCHEMA_PATH"
         echo '{"success": true, "message": "Database reset"}'
         ;;
 

@@ -78,7 +78,6 @@ tests/
 │           └── Users/
 │               └── IndexTest.php
 └── e2e/
-    ├── db-cli.sh
     ├── e2e.db
     ├── schema.sql
     └── screenshots/

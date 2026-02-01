@@ -49,17 +49,20 @@ cp "$BLUEPRINT_FLOW_DIR/.claude/skills/blueprint/SKILL.md" "$TARGET_DIR/.claude/
 cp "$BLUEPRINT_FLOW_DIR/.claude/skills/hub/SKILL.md" "$TARGET_DIR/.claude/skills/hub/"
 cp "$BLUEPRINT_FLOW_DIR/.claude/skills/e2e/SKILL.md" "$TARGET_DIR/.claude/skills/e2e/"
 
-# Copy blueprint CLI and schema
-cp "$BLUEPRINT_FLOW_DIR/blueprint/db-cli.sh" "$TARGET_DIR/blueprint/"
+# Copy CLI scripts
+mkdir -p "$TARGET_DIR/scripts"
+cp "$BLUEPRINT_FLOW_DIR/scripts/blueprint-db-cli.sh" "$TARGET_DIR/scripts/"
+cp "$BLUEPRINT_FLOW_DIR/scripts/e2e-db-cli.sh" "$TARGET_DIR/scripts/"
+chmod +x "$TARGET_DIR/scripts/blueprint-db-cli.sh"
+chmod +x "$TARGET_DIR/scripts/e2e-db-cli.sh"
+
+# Copy blueprint schema
 cp "$BLUEPRINT_FLOW_DIR/blueprint/schema.sql" "$TARGET_DIR/blueprint/"
 cp "$BLUEPRINT_FLOW_DIR/blueprint/schema.dbml" "$TARGET_DIR/blueprint/"
-chmod +x "$TARGET_DIR/blueprint/db-cli.sh"
 
-# Copy e2e CLI and schema
-cp "$BLUEPRINT_FLOW_DIR/tests/e2e/db-cli.sh" "$TARGET_DIR/tests/e2e/"
+# Copy e2e schema
 cp "$BLUEPRINT_FLOW_DIR/tests/e2e/schema.sql" "$TARGET_DIR/tests/e2e/"
 cp "$BLUEPRINT_FLOW_DIR/tests/e2e/schema.dbml" "$TARGET_DIR/tests/e2e/"
-chmod +x "$TARGET_DIR/tests/e2e/db-cli.sh"
 
 # Copy stack-specific patterns
 mkdir -p "$TARGET_DIR/stacks/$STACK"
@@ -68,8 +71,8 @@ cp "$BLUEPRINT_FLOW_DIR/stacks/$STACK/config.env" "$TARGET_DIR/stacks/$STACK/"
 
 # Initialize databases
 echo "Initializing databases..."
-"$TARGET_DIR/blueprint/db-cli.sh" init
-"$TARGET_DIR/tests/e2e/db-cli.sh" init
+"$TARGET_DIR/scripts/blueprint-db-cli.sh" init
+"$TARGET_DIR/scripts/e2e-db-cli.sh" init
 
 # Create minimal CLAUDE.md if not exists
 if [[ ! -f "$TARGET_DIR/CLAUDE.md" ]]; then

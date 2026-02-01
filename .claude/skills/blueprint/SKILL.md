@@ -183,12 +183,12 @@ Show old vs new version and any notable changes.
 ### Initial Check
 
 ```bash
-./blueprint/db-cli.sh overview
+./scripts/blueprint-db-cli.sh overview
 ```
 
 If DB not initialized:
 ```bash
-./blueprint/db-cli.sh init
+./scripts/blueprint-db-cli.sh init
 ```
 
 ### Action Selection
@@ -223,12 +223,12 @@ draft → pending_review → approved → in_progress → impl_review → testin
 ### Status Commands
 
 ```bash
-./blueprint/db-cli.sh status {id} pending_review  # Request review
-./blueprint/db-cli.sh status {id} approved        # Human approves
-./blueprint/db-cli.sh status {id} needs_revision  # Request changes
-./blueprint/db-cli.sh revision {id} 'reason'      # With reason
-./blueprint/db-cli.sh lock {id} {agent}           # Start work
-./blueprint/db-cli.sh unlock {id}                 # Release lock
+./scripts/blueprint-db-cli.sh status {id} pending_review  # Request review
+./scripts/blueprint-db-cli.sh status {id} approved        # Human approves
+./scripts/blueprint-db-cli.sh status {id} needs_revision  # Request changes
+./scripts/blueprint-db-cli.sh revision {id} 'reason'      # With reason
+./scripts/blueprint-db-cli.sh lock {id} {agent}           # Start work
+./scripts/blueprint-db-cli.sh unlock {id}                 # Release lock
 ```
 
 ---
@@ -277,7 +277,7 @@ AskUserQuestion:
 
 If "Submit for Review":
 ```bash
-./blueprint/db-cli.sh status {id} pending_review
+./scripts/blueprint-db-cli.sh status {id} pending_review
 ```
 
 ---
@@ -287,7 +287,7 @@ If "Submit for Review":
 ### Step 1: List Pending
 
 ```bash
-./blueprint/db-cli.sh pending-review
+./scripts/blueprint-db-cli.sh pending-review
 ```
 
 Show specs awaiting review.
@@ -295,7 +295,7 @@ Show specs awaiting review.
 ### Step 2: Get Spec Details
 
 ```bash
-./blueprint/db-cli.sh get {category} {type} {slug}
+./scripts/blueprint-db-cli.sh get {category} {type} {slug}
 ```
 
 Display full spec data to user.
@@ -317,8 +317,8 @@ AskUserQuestion:
 
 If "Approve":
 ```bash
-./blueprint/db-cli.sh status {id} approved
-./blueprint/db-cli.sh reviewed {id}
+./scripts/blueprint-db-cli.sh status {id} approved
+./scripts/blueprint-db-cli.sh reviewed {id}
 ```
 
 If "Request Changes":
@@ -329,7 +329,7 @@ AskUserQuestion:
 ```
 Then:
 ```bash
-./blueprint/db-cli.sh revision {id} '{reason}'
+./scripts/blueprint-db-cli.sh revision {id} '{reason}'
 ```
 
 ---
@@ -339,7 +339,7 @@ Then:
 ### Step 1: List and Select
 
 ```bash
-./blueprint/db-cli.sh overview
+./scripts/blueprint-db-cli.sh overview
 ```
 
 ```
@@ -351,7 +351,7 @@ AskUserQuestion:
 ### Step 2: Get Current Data
 
 ```bash
-./blueprint/db-cli.sh get {category} {type} {slug}
+./scripts/blueprint-db-cli.sh get {category} {type} {slug}
 ```
 
 ### Step 3: Ask What to Update
@@ -385,7 +385,7 @@ AskUserQuestion:
 ### Step 4: Merge and Save
 
 ```bash
-./blueprint/db-cli.sh update {id} '{...merged json...}'
+./scripts/blueprint-db-cli.sh update {id} '{...merged json...}'
 ```
 
 Note: Updating resets `human_reviewed` to false.
@@ -396,13 +396,13 @@ Note: Updating resets `human_reviewed` to false.
 
 ```bash
 # Overall progress
-./blueprint/db-cli.sh progress
+./scripts/blueprint-db-cli.sh progress
 
 # By status
-./blueprint/db-cli.sh available        # Ready to work
-./blueprint/db-cli.sh in-progress      # Being worked on
-./blueprint/db-cli.sh pending-review   # Awaiting review
-./blueprint/db-cli.sh needs-attention  # Needs revision
+./scripts/blueprint-db-cli.sh available        # Ready to work
+./scripts/blueprint-db-cli.sh in-progress      # Being worked on
+./scripts/blueprint-db-cli.sh pending-review   # Awaiting review
+./scripts/blueprint-db-cli.sh needs-attention  # Needs revision
 ```
 
 ---

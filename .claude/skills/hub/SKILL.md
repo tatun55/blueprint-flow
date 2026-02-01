@@ -28,8 +28,8 @@ allowed-tools: Bash, Task, AskUserQuestion
 ## Initial Check
 
 ```bash
-./blueprint/db-cli.sh progress
-./blueprint/db-cli.sh available
+./scripts/blueprint-db-cli.sh progress
+./scripts/blueprint-db-cli.sh available
 ```
 
 ## Action Selection
@@ -54,7 +54,7 @@ AskUserQuestion:
 ### 1. Get Available Specs
 
 ```bash
-./blueprint/db-cli.sh available
+./scripts/blueprint-db-cli.sh available
 ```
 
 ### 2. Determine Instructor
@@ -68,7 +68,7 @@ AskUserQuestion:
 ### 3. Lock and Dispatch
 
 ```bash
-./blueprint/db-cli.sh lock {id} {instructor}-instructor
+./scripts/blueprint-db-cli.sh lock {id} {instructor}-instructor
 ```
 
 ```
@@ -85,7 +85,7 @@ Task(
   Spec: {json}
 
   Create task content and save to blueprint.db:
-  ./blueprint/db-cli.sh task-add {spec_id} '{instructor}' '{content}'
+  ./scripts/blueprint-db-cli.sh task-add {spec_id} '{instructor}' '{content}'
   """
 )
 ```
@@ -94,7 +94,7 @@ Task(
 
 ```bash
 # Get task id
-./blueprint/db-cli.sh task-list {spec_id}
+./scripts/blueprint-db-cli.sh task-list {spec_id}
 ```
 
 ```
@@ -106,10 +106,10 @@ Task(
 
   Read: .claude/agents/coders/{coder}.md
 
-  Get task: ./blueprint/db-cli.sh task-content {task_id}
+  Get task: ./scripts/blueprint-db-cli.sh task-content {task_id}
 
   Execute instructions. Create files.
-  Update: ./blueprint/db-cli.sh task-status {task_id} completed
+  Update: ./scripts/blueprint-db-cli.sh task-status {task_id} completed
   """
 )
 ```
@@ -117,8 +117,8 @@ Task(
 ### 5. Request Review
 
 ```bash
-./blueprint/db-cli.sh status {id} impl_review
-./blueprint/db-cli.sh unlock {id}
+./scripts/blueprint-db-cli.sh status {id} impl_review
+./scripts/blueprint-db-cli.sh unlock {id}
 ```
 
 ```
@@ -137,15 +137,15 @@ AskUserQuestion:
 ### E2E 対象 Spec
 
 ```bash
-./blueprint/db-cli.sh e2e-pending
+./scripts/blueprint-db-cli.sh e2e-pending
 ```
 
 ### Level 進行
 
 ```bash
 # Level 進捗確認
-./blueprint/db-cli.sh e2e-progress
-./tests/e2e/db-cli.sh spec-summary {spec_id}
+./scripts/blueprint-db-cli.sh e2e-progress
+./scripts/e2e-db-cli.sh spec-summary {spec_id}
 ```
 
 Level 1 全完了時:
@@ -184,7 +184,7 @@ Task(
 
   Read: .claude/agents/coders/test.md
 
-  Get task: ./blueprint/db-cli.sh task-content {task_id}
+  Get task: ./scripts/blueprint-db-cli.sh task-content {task_id}
 
   Execute tests. Take screenshots.
   Record results in e2e.db.
@@ -200,7 +200,7 @@ Task(
 
 ```bash
 # Wave N の approved specs
-./blueprint/db-cli.sh sql "SELECT * FROM specs WHERE wave = {N} AND status = 'approved'"
+./scripts/blueprint-db-cli.sh sql "SELECT * FROM specs WHERE wave = {N} AND status = 'approved'"
 ```
 
 同一 Wave 内は並列で Task 起動:
@@ -213,7 +213,7 @@ Task(description="db task for projects", ...)
 ### Wave 完了確認
 
 ```bash
-./blueprint/db-cli.sh sql "SELECT COUNT(*) FROM specs WHERE wave = {N} AND status NOT IN ('done', 'testing')"
+./scripts/blueprint-db-cli.sh sql "SELECT COUNT(*) FROM specs WHERE wave = {N} AND status NOT IN ('done', 'testing')"
 ```
 
 Count = 0 なら次 Wave へ。
@@ -258,15 +258,15 @@ AskUserQuestion:
 
 ```bash
 # 進捗確認
-./blueprint/db-cli.sh progress
-./blueprint/db-cli.sh e2e-progress
+./scripts/blueprint-db-cli.sh progress
+./scripts/blueprint-db-cli.sh e2e-progress
 
 # 処理待ち
-./blueprint/db-cli.sh available
-./blueprint/db-cli.sh pending-review
-./blueprint/db-cli.sh e2e-pending
+./scripts/blueprint-db-cli.sh available
+./scripts/blueprint-db-cli.sh pending-review
+./scripts/blueprint-db-cli.sh e2e-pending
 
 # ステータス更新
-./blueprint/db-cli.sh status {id} {status}
-./blueprint/db-cli.sh e2e-status {id} passed
+./scripts/blueprint-db-cli.sh status {id} {status}
+./scripts/blueprint-db-cli.sh e2e-status {id} passed
 ```

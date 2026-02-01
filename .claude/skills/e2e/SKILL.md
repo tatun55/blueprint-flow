@@ -11,12 +11,12 @@ Manage screenshot-based E2E tests with Playwright MCP.
 ## Initial Check
 
 ```bash
-./tests/e2e/db-cli.sh overview
+./scripts/e2e-db-cli.sh overview
 ```
 
 If not initialized:
 ```bash
-./tests/e2e/db-cli.sh init
+./scripts/e2e-db-cli.sh init
 ```
 
 ## Action Selection
@@ -48,12 +48,12 @@ Gather via AskUserQuestion:
 5. Related page spec (optional, from blueprint)
 
 ```bash
-./tests/e2e/db-cli.sh add {slug} "{name}" "{url}" {width}x{height}
+./scripts/e2e-db-cli.sh add {slug} "{name}" "{url}" {width}x{height}
 ```
 
 Example:
 ```bash
-./tests/e2e/db-cli.sh add dashboard_main "Dashboard Main View" "/dashboard" 1280x720
+./scripts/e2e-db-cli.sh add dashboard_main "Dashboard Main View" "/dashboard" 1280x720
 ```
 
 ---
@@ -63,7 +63,7 @@ Example:
 ### Step 1: Create Run Record
 
 ```bash
-./tests/e2e/db-cli.sh run {slug}
+./scripts/e2e-db-cli.sh run {slug}
 ```
 
 Returns: `{"success": true, "run_id": 1, "case_id": 1}`
@@ -71,7 +71,7 @@ Returns: `{"success": true, "run_id": 1, "case_id": 1}`
 ### Step 2: Get Test Case Details
 
 ```bash
-./tests/e2e/db-cli.sh get {slug}
+./scripts/e2e-db-cli.sh get {slug}
 ```
 
 ### Step 3: Navigate and Screenshot
@@ -94,15 +94,15 @@ mcp__playwright-mcp__playwright_screenshot
 ### Step 4: Record Screenshot
 
 ```bash
-./tests/e2e/db-cli.sh screenshot {run_id} actual "tests/e2e/screenshots/{filename}.png"
+./scripts/e2e-db-cli.sh screenshot {run_id} actual "tests/e2e/screenshots/{filename}.png"
 ```
 
 ### Step 5: Record Result
 
 ```bash
-./tests/e2e/db-cli.sh result {run_id} passed
+./scripts/e2e-db-cli.sh result {run_id} passed
 # or
-./tests/e2e/db-cli.sh result {run_id} failed "Button misaligned"
+./scripts/e2e-db-cli.sh result {run_id} failed "Button misaligned"
 ```
 
 ### Step 6: Close Browser
@@ -136,17 +136,17 @@ tests/e2e/screenshots/001_dashboard_main_baseline.png
 
 ### List All Tests
 ```bash
-./tests/e2e/db-cli.sh overview
+./scripts/e2e-db-cli.sh overview
 ```
 
 ### Tests Needing Attention
 ```bash
-./tests/e2e/db-cli.sh attention
+./scripts/e2e-db-cli.sh attention
 ```
 
 ### Specific Test Runs
 ```bash
-./tests/e2e/db-cli.sh runs {slug}
+./scripts/e2e-db-cli.sh runs {slug}
 ```
 
 ---
@@ -156,7 +156,7 @@ tests/e2e/screenshots/001_dashboard_main_baseline.png
 After confirming a screenshot is correct:
 
 ```bash
-./tests/e2e/db-cli.sh baseline {slug} "tests/e2e/screenshots/{filename}.png"
+./scripts/e2e-db-cli.sh baseline {slug} "tests/e2e/screenshots/{filename}.png"
 ```
 
 ---
@@ -166,7 +166,7 @@ After confirming a screenshot is correct:
 For running multiple tests:
 
 <flow>
-  <step>Get active test cases: `./tests/e2e/db-cli.sh list`</step>
+  <step>Get active test cases: `./scripts/e2e-db-cli.sh list`</step>
   <step>For each test case:</step>
   <step>  - Create run record</step>
   <step>  - Navigate to URL</step>

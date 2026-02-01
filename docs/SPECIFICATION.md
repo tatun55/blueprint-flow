@@ -245,7 +245,7 @@ Human                    Blueprint Skill              DB
   │                           │                        │
   │ {columns: [...]}          │                        │
   │ ─────────────────────────►│                        │
-  │                           │ db-cli.sh add          │
+  │                           │ blueprint-db-cli.sh add│
   │                           │ ────────────────────►  │
   │                           │                        │
   │                           │ ◄────────────────────  │
@@ -777,18 +777,18 @@ sqlite3 blueprint.db < migration_v2.sql
 
 ```bash
 # 状態確認
-./blueprint/db-cli.sh sql "SELECT * FROM specs WHERE status != 'done'"
-./tests/e2e/db-cli.sh sql "SELECT * FROM test_runs WHERE result = 'failed'"
+./scripts/blueprint-db-cli.sh sql "SELECT * FROM specs WHERE status != 'done'"
+./scripts/e2e-db-cli.sh sql "SELECT * FROM test_runs WHERE result = 'failed'"
 
 # ロック解除
-./blueprint/db-cli.sh unlock {id}
+./scripts/blueprint-db-cli.sh unlock {id}
 
 # 状態リセット
-./blueprint/db-cli.sh status {id} approved
+./scripts/blueprint-db-cli.sh status {id} approved
 
 # 全リセット (危険)
-./blueprint/db-cli.sh reset
-./tests/e2e/db-cli.sh reset
+./scripts/blueprint-db-cli.sh reset
+./scripts/e2e-db-cli.sh reset
 ```
 
 ---

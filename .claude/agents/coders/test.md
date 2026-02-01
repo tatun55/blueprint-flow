@@ -60,16 +60,16 @@ Examples:
 
 ```bash
 # Create test run
-./tests/e2e/db-cli.sh run {slug}
+./scripts/e2e-db-cli.sh run {slug}
 # Returns: {"run_id": 1, "case_id": 1}
 
 # Record screenshot
-./tests/e2e/db-cli.sh screenshot {run_id} actual "{path}"
+./scripts/e2e-db-cli.sh screenshot {run_id} actual "{path}"
 
 # Record result
-./tests/e2e/db-cli.sh result {run_id} passed
+./scripts/e2e-db-cli.sh result {run_id} passed
 # or
-./tests/e2e/db-cli.sh result {run_id} failed "Error message"
+./scripts/e2e-db-cli.sh result {run_id} failed "Error message"
 ```
 
 ## Constraints
