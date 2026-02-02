@@ -435,6 +435,9 @@ cat .blueprint-language 2>/dev/null || echo "ja"
         <branch condition="type=tables">
           <goto>define_table</goto>
         </branch>
+        <branch condition="type=seeders">
+          <goto>define_seeder</goto>
+        </branch>
         <branch condition="type=pages">
           <goto>define_page</goto>
         </branch>
@@ -498,6 +501,82 @@ cat .blueprint-language 2>/dev/null || echo "ja"
     <check>All columns have type and description</check>
     <check>Foreign keys have on_delete behavior</check>
     <check>Indexes are defined for query patterns</check>
+  </quality_checks>
+</workflow>
+
+---
+
+### Define Seeder
+
+<workflow name="define_seeder">
+  <note>Seeders use static data (NO factory, NO faker). Same seeder for dev and test.</note>
+
+  <required_content>
+    ```markdown
+    # Seeder: {table_name}
+
+    ## Target Table
+    - Table: {table_name}
+    - Model: {ModelName}
+    - Depends on: [list of parent seeders that must run first]
+
+    ## Records
+    | ID | Purpose | Key Fields |
+    |----|---------|------------|
+    | 1 | Admin user for testing admin features | name: "Admin", email: "admin@example.com", role: "admin" |
+    | 2 | Regular user for testing user flows | name: "Test User", email: "user@example.com", role: "user" |
+    | 3 | Inactive user for testing inactive state | name: "Inactive", email: "inactive@example.com", is_active: false |
+
+    ## Record Details
+
+    ### Record 1: Admin User
+    ```php
+    [
+        'id' => 1,
+        'name' => 'Admin',
+        'email' => 'admin@example.com',
+        'password' => Hash::make('password'),
+        'role' => 'admin',
+        'is_active' => true,
+    ]
+    ```
+
+    ### Record 2: Regular User
+    ```php
+    [
+        'id' => 2,
+        'name' => 'Test User',
+        'email' => 'user@example.com',
+        'password' => Hash::make('password'),
+        'role' => 'user',
+        'is_active' => true,
+    ]
+    ```
+
+    ## Wave
+    - Wave number: {n} (based on FK dependencies)
+
+    ## Usage
+    - Development: `php artisan db:seed`
+    - Testing: Called in test setup
+    ```
+  </required_content>
+
+  <rules>
+    <rule>NO factory() - all records explicitly defined</rule>
+    <rule>NO faker() - all values are static</rule>
+    <rule>Fixed IDs required when other seeders reference this table</rule>
+    <rule>Each record needs a clear purpose comment</rule>
+    <rule>Minimal but sufficient records for dev/test scenarios</rule>
+  </rules>
+
+  <quality_checks>
+    <check>Target table and model specified</check>
+    <check>Dependencies (parent seeders) listed</check>
+    <check>Each record has ID, purpose, and key fields</check>
+    <check>Record details show exact PHP array</check>
+    <check>Wave number assigned based on dependencies</check>
+    <check>No factory() or fake() in record details</check>
   </quality_checks>
 </workflow>
 
