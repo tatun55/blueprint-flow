@@ -628,24 +628,50 @@ cat .blueprint-language 2>/dev/null || echo "ja"
   </loop>
 
   <step id="completion_check">
+    <description>Check what's missing and guide to next step</description>
+
+    <check_data_specs>
+      <bash>
+# Count data specs
+TABLES_COUNT=$(./scripts/blueprint-db-cli.sh sql "SELECT COUNT(*) FROM specs WHERE category='data' AND type='tables'" | jq -r '.[0]."COUNT(*)"')
+SEEDERS_COUNT=$(./scripts/blueprint-db-cli.sh sql "SELECT COUNT(*) FROM specs WHERE category='data' AND type='seeders'" | jq -r '.[0]."COUNT(*)"')
+echo "tables:$TABLES_COUNT seeders:$SEEDERS_COUNT"
+      </bash>
+    </check_data_specs>
+
     <conditional>
-      <branch condition="overview_approved_no_data">
+      <branch condition="no_data_specs">
+        <description>No data/tables or data/seeders specs exist</description>
         <message lang="ja">
-概要が承認されました！
+仕様が承認されました！
+
+⚠️ データベース定義がまだありません。
 
 次のステップ:
-1. `/init-db` でデータベース定義（テーブル・シーダー）
-2. `/blueprint` で UI ページ仕様を追加
-3. `/hub` で実装開始
+1. **`/init-db`** でテーブル・シーダー定義 ← 必須
+2. `/hub` で実装開始
         </message>
       </branch>
-      <branch condition="all_ui_approved">
+      <branch condition="tables_only_no_seeders">
+        <description>Tables exist but no seeders</description>
         <message lang="ja">
-UI・アクション仕様が承認されました！
+仕様が承認されました！
+
+⚠️ シーダー定義がまだありません。
 
 次のステップ:
-- データベース未定義: `/init-db` を実行
-- 実装開始: `/hub` を実行
+1. **`/init-db`** でシーダー定義を追加 ← 推奨
+2. `/hub` で実装開始（シーダーなしで進める場合）
+        </message>
+      </branch>
+      <branch condition="all_data_specs_exist">
+        <description>Both tables and seeders exist</description>
+        <message lang="ja">
+すべての仕様が承認されました！
+
+次のステップ:
+- `/hub` で実装を開始
+- `/e2e` でE2Eテストを実行
         </message>
       </branch>
     </conditional>
