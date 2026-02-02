@@ -628,53 +628,66 @@ cat .blueprint-language 2>/dev/null || echo "ja"
   </loop>
 
   <step id="completion_check">
-    <description>Check what's missing and guide to next step</description>
+    <description>CRITICAL: Check data/seeders before recommending /hub</description>
 
-    <check_data_specs>
-      <bash>
-# Count data specs
-TABLES_COUNT=$(./scripts/blueprint-db-cli.sh sql "SELECT COUNT(*) FROM specs WHERE category='data' AND type='tables'" | jq -r '.[0]."COUNT(*)"')
-SEEDERS_COUNT=$(./scripts/blueprint-db-cli.sh sql "SELECT COUNT(*) FROM specs WHERE category='data' AND type='seeders'" | jq -r '.[0]."COUNT(*)"')
-echo "tables:$TABLES_COUNT seeders:$SEEDERS_COUNT"
-      </bash>
-    </check_data_specs>
+    <action>MUST run this check before showing next steps</action>
+    <bash>./scripts/blueprint-db-cli.sh sql "SELECT category, type, COUNT(*) as count FROM specs WHERE category='data' GROUP BY category, type"</bash>
 
-    <conditional>
-      <branch condition="no_data_specs">
-        <description>No data/tables or data/seeders specs exist</description>
-        <message lang="ja">
-仕様が承認されました！
+    <logic>
+      1. Count specs where category='data' AND type='tables'
+      2. Count specs where category='data' AND type='seeders'
+      3. Compare the counts
+    </logic>
 
-⚠️ データベース定義がまだありません。
+    <decision_tree>
+      IF tables_count == 0:
+        → MUST recommend /init-db (no DB definition)
+      ELSE IF seeders_count == 0:
+        → MUST recommend /init-db (seeders missing)
+      ELSE IF seeders_count < tables_count:
+        → SHOULD recommend /init-db (some seeders missing)
+      ELSE:
+        → Can recommend /hub
+    </decision_tree>
+
+    <messages>
+      <message condition="no_tables" lang="ja">
+⚠️ データベース定義がありません。
 
 次のステップ:
 1. **`/init-db`** でテーブル・シーダー定義 ← 必須
 2. `/hub` で実装開始
-        </message>
-      </branch>
-      <branch condition="tables_only_no_seeders">
-        <description>Tables exist but no seeders</description>
-        <message lang="ja">
-仕様が承認されました！
+      </message>
 
-⚠️ シーダー定義がまだありません。
+      <message condition="no_seeders" lang="ja">
+⚠️ シーダー定義がありません（テーブル定義はあります）。
 
 次のステップ:
 1. **`/init-db`** でシーダー定義を追加 ← 推奨
 2. `/hub` で実装開始（シーダーなしで進める場合）
-        </message>
-      </branch>
-      <branch condition="all_data_specs_exist">
-        <description>Both tables and seeders exist</description>
-        <message lang="ja">
-すべての仕様が承認されました！
+      </message>
+
+      <message condition="incomplete_seeders" lang="ja">
+⚠️ 一部のテーブルにシーダーがありません。
+
+次のステップ:
+1. **`/init-db`** で不足シーダーを追加 ← 推奨
+2. `/hub` で実装開始
+      </message>
+
+      <message condition="all_complete" lang="ja">
+✅ すべての仕様が揃っています！
 
 次のステップ:
 - `/hub` で実装を開始
 - `/e2e` でE2Eテストを実行
-        </message>
-      </branch>
-    </conditional>
+      </message>
+    </messages>
+
+    <important>
+      NEVER recommend /hub if seeders_count == 0 and tables_count > 0.
+      Always guide user to /init-db first to create seeders.
+    </important>
   </step>
 </workflow>
 
