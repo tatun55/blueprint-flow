@@ -1,13 +1,23 @@
 ---
 name: init-db
-description: Database schema and seeder definition. Creates table and seeder specs from approved overview.
-allowed-tools: Bash, Read, Write, AskUserQuestion
+description: Database schema hub. Creates specs, analyzes FK dependencies, orchestrates parallel implementation.
+allowed-tools: Bash, Read, Write, AskUserQuestion, Task
 ---
 
-# Init DB - Database Schema & Seeder Definition
+# Init DB - Database Schema Hub
 
-Defines database tables and seeders based on approved `core/overview` spec.
-Run AFTER `/blueprint` approves the overview, BEFORE `/hub` implementation.
+**Hub agent for database layer.** Defines tables/seeders, analyzes dependencies, orchestrates parallel implementation.
+
+---
+
+## Role: DB Hub (like /hub for database)
+
+```
+/init-db (this skill)
+├── Phase 1: Spec Creation (tables + seeders)
+├── Phase 2: FK Dependency Analysis → Wave Assignment
+└── Phase 3: Parallel Implementation via db-impl agents
+```
 
 ---
 
@@ -16,8 +26,8 @@ Run AFTER `/blueprint` approves the overview, BEFORE `/hub` implementation.
 ```
 /blueprint → /init-db → /hub
     ↓           ↓         ↓
-  概要・機能   テーブル    実装
-  UI specs    シーダー
+  概要・機能   DB実装      UI実装
+  UI specs    (並列)
 ```
 
 ---
@@ -410,15 +420,131 @@ Before running `/init-db`:
   <step id="completion">
     <conditional>
       <branch condition="all_data_approved">
-        <message lang="ja">
-データベース定義が完了しました！
-
-次のステップ:
-- UI仕様を追加: `/blueprint` で ui/pages を定義
-- 実装開始: `/hub` でコード生成
-        </message>
+        <goto>analyze_dependencies</goto>
       </branch>
     </conditional>
+  </step>
+</workflow>
+
+---
+
+## Phase 2: FK Dependency Analysis
+
+<workflow name="analyze_dependencies">
+  <step id="extract_fk_relations">
+    <description>Parse all table specs for foreign key relationships</description>
+    <bash>./scripts/blueprint-db-cli.sh list data tables</bash>
+    <action>For each table spec, extract Relations section</action>
+    <action>Build dependency graph: table → [depends_on_tables]</action>
+  </step>
+
+  <step id="assign_waves">
+    <description>Topological sort to determine execution order</description>
+    <logic>
+      Wave 1: Tables with no FK dependencies (independent)
+      Wave 2: Tables depending only on Wave 1 tables
+      Wave 3: Tables depending on Wave 1 or 2 tables
+      ... and so on
+    </logic>
+    <example>
+      categories: no FK → Wave 1
+      users: no FK → Wave 1
+      todos: FK to categories, users → Wave 2
+      comments: FK to todos, users → Wave 3
+    </example>
+  </step>
+
+  <step id="show_execution_plan">
+    <prompt lang="ja">
+以下の順序で実装します：
+
+Wave 1 (並列実行):
+- {table1}: 依存なし
+- {table2}: 依存なし
+
+Wave 2 (Wave 1完了後、並列実行):
+- {table3}: {table1}, {table2} に依存
+
+実装を開始しますか？
+    </prompt>
+    <options>
+      <option id="execute">実行 / Execute</option>
+      <option id="cancel">キャンセル / Cancel</option>
+    </options>
+  </step>
+
+  <conditional>
+    <branch condition="execute">
+      <goto>parallel_implementation</goto>
+    </branch>
+  </conditional>
+</workflow>
+
+---
+
+## Phase 3: Parallel Implementation
+
+<workflow name="parallel_implementation">
+  <step id="execute_waves">
+    <loop for_each="waves" item="wave">
+      <step id="spawn_agents">
+        <description>Spawn db-impl agent for each table in wave (PARALLEL)</description>
+        <action>
+          For each table in wave.tables:
+            Task(
+              subagent_type: "general-purpose",
+              prompt: "You are db-impl agent. Read .claude/agents/db-impl.md and execute for table: {table}, table_spec_id: {id}, seeder_spec_id: {seeder_id}",
+              run_in_background: false  // Wait for wave completion
+            )
+        </action>
+        <note>Use single message with multiple Task tool calls for parallelism</note>
+      </step>
+
+      <step id="wait_for_wave">
+        <description>All agents in wave must complete before next wave</description>
+        <validation>
+          <check>All agents returned success</check>
+          <check>All files created</check>
+        </validation>
+        <on_fail>
+          <action>Log failed tables</action>
+          <action>Skip dependent tables in later waves</action>
+        </on_fail>
+      </step>
+    </loop>
+  </step>
+
+  <step id="run_migrations">
+    <bash>php artisan migrate:fresh</bash>
+    <on_fail>
+      <prompt lang="ja">マイグレーションが失敗しました。エラーを確認してください。</prompt>
+    </on_fail>
+  </step>
+
+  <step id="update_database_seeder">
+    <description>Add all seeders to DatabaseSeeder.php in wave order</description>
+    <action>Edit database/seeders/DatabaseSeeder.php</action>
+    <action>Add $this->call([...]) with seeders in dependency order</action>
+  </step>
+
+  <step id="run_seeders">
+    <bash>php artisan db:seed</bash>
+    <on_fail>
+      <prompt lang="ja">シーダーが失敗しました。エラーを確認してください。</prompt>
+    </on_fail>
+  </step>
+
+  <step id="completion">
+    <message lang="ja">
+✅ データベース実装が完了しました！
+
+作成されたファイル:
+{list_created_files}
+
+次のステップ:
+- `/hub` でUI実装を開始
+- `/e2e` でテストを実行
+    </message>
   </step>
 </workflow>
 
