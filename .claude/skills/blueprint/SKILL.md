@@ -322,6 +322,45 @@ cat .blueprint-language 2>/dev/null || echo "ja"
 
 ---
 
+## Spec Creation Order (CRITICAL)
+
+<workflow name="spec_order">
+  <principle>
+    Specs MUST be created and implemented in this order to respect dependencies:
+  </principle>
+
+  <order>
+    <step order="1" category="core" type="overview">
+      App overview with features and routes
+    </step>
+    <step order="2" category="data" type="tables">
+      Database tables (migrations + models)
+      - Required before UI pages that use these models
+    </step>
+    <step order="3" category="data" type="seeders">
+      Seeders for each table
+      - Required for development and testing
+      - Must follow table creation order (FK constraints)
+    </step>
+    <step order="4" category="ui" type="pages">
+      UI pages
+      - Depends on tables being defined
+    </step>
+    <step order="5" category="action" type="*">
+      Actions (sync/async/scheduled)
+      - Only when needed (not for page CRUD)
+    </step>
+  </order>
+
+  <dependency_rule>
+    Tables → Seeders → Pages
+    Each seeder depends on its table being done.
+    Pages depend on their data tables being done.
+  </dependency_rule>
+</workflow>
+
+---
+
 ## Phase 2: Feature Listing
 
 <workflow name="feature_list_phase">
@@ -339,6 +378,7 @@ cat .blueprint-language 2>/dev/null || echo "ja"
       <rule pattern="create|add|作成" category="ui" type="pages"/>
       <rule pattern="edit|update|編集" category="ui" type="pages"/>
       <rule pattern="table|model" category="data" type="tables"/>
+      <rule pattern="seeder" category="data" type="seeders"/>
       <rule pattern="notify|email|通知" category="action" type="async"/>
     </mapping>
   </step>

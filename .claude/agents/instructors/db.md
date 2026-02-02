@@ -186,22 +186,36 @@ class {ModelName}Seeder extends Seeder
 {
     public function run(): void
     {
-        {seeder_logic}
+        $records = [
+            // Comment explaining this record's purpose
+            ['column1' => 'value1', 'column2' => 'value2'],
+            ['column1' => 'value3', 'column2' => 'value4'],
+        ];
+
+        foreach ($records as $data) {
+            {ModelName}::create($data);
+        }
     }
 }
 </template>
 
 <rules>
-- Use Model::factory() if factory exists
-- Use faker for dynamic data: fake()->method()
-- Respect FK constraints (seed parents first)
+- NO Factory - use explicit static arrays
+- NO Faker - use fixed, predictable values
+- Use fixed IDs when referenced by other seeders (for FK consistency)
+- Add comments explaining each record's role/purpose
+- Keep data minimal but sufficient for development and testing
+- Same seeder must work for both `php artisan db:seed` and test setup
+- Respect FK constraints (parent tables seeded in earlier waves)
 </rules>
 
 ## Validation
 - [ ] Seeder created in Tables/ directory
 - [ ] Correct namespace
 - [ ] All fields from spec included
-- [ ] FK values exist in parent tables
+- [ ] FK values match IDs from parent seeders
+- [ ] No factory() or fake() calls
+- [ ] Comments explain record purposes
 
 ## Completion Flow
 1. All files created and validated

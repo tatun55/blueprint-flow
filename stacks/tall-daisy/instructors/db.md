@@ -89,5 +89,32 @@ public function run(): void
 }
 ```
 
-- Use `fake()->method()` for dynamic data
+### Seeder Rules (CRITICAL)
+
+```php
+// CORRECT: Static arrays with explicit values
+$records = [
+    // Admin user for testing approval flows
+    ['id' => 1, 'name' => 'Admin User', 'email' => 'admin@example.com'],
+    // Regular user for testing submissions
+    ['id' => 2, 'name' => 'Test User', 'email' => 'user@example.com'],
+];
+
+foreach ($records as $data) {
+    User::create($data);
+}
+
+// FORBIDDEN: Factory
+User::factory()->count(10)->create();
+
+// FORBIDDEN: Faker
+['name' => fake()->name(), 'email' => fake()->email()]
+```
+
+**Rules:**
+- NO Factory - use explicit static arrays
+- NO Faker - use fixed, predictable values
+- Use fixed IDs when referenced by other seeders
+- Add comments explaining each record's role
+- Same seeder works for development AND testing
 - Respect FK constraints (seed parents first)
