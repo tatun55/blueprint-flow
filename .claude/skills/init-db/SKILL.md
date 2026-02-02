@@ -89,17 +89,86 @@ Before running `/init-db`:
 ## Define Table
 
 <workflow name="define_table">
-  <step id="gather_info">
-    <prompt lang="ja">「{table_name}」テーブルについて教えてください</prompt>
-    <questions>
-      <question>どんなカラムが必要？ / What columns are needed?</question>
-      <question>他テーブルとの関連は？ / Relations to other tables?</question>
-      <question>よく検索するカラムは？ / Frequently queried columns?</question>
-    </questions>
+  <step id="analyze_overview">
+    <description>Analyze overview spec for entity information</description>
+    <action>Extract entity from Features/Routes tables</action>
+    <action>Identify implied columns from feature descriptions</action>
+    <action>Detect relations from route patterns (e.g., /users/{user}/projects)</action>
+  </step>
+
+  <step id="detect_ambiguity">
+    <description>Check if overview provides enough detail for table design</description>
+    <checks>
+      <check id="has_fields">Are required fields clear from feature description?</check>
+      <check id="has_status">Does entity need status/state management?</check>
+      <check id="has_relations">Are relations to other entities clear?</check>
+      <check id="has_constraints">Are uniqueness/validation rules implied?</check>
+    </checks>
+  </step>
+
+  <step id="clarify_ambiguity">
+    <description>If overview is ambiguous, ask targeted questions to refine spec</description>
+    <conditional>
+      <branch condition="ambiguity_found">
+        <prompt lang="ja">
+「{table_name}」テーブルの設計にあたり、概要から読み取れない点があります：
+        </prompt>
+        <ask_specific_questions>
+          <example issue="unclear_fields">
+「{feature_name}」機能で、{entity}にはどんな情報を保存しますか？
+例: 名前、メール、ステータス、作成日時など
+          </example>
+          <example issue="unclear_status">
+「{entity}」には状態管理が必要ですか？
+例: active/inactive、draft/published/archived など
+          </example>
+          <example issue="unclear_relation">
+「{entity}」と「{other_entity}」の関係は？
+- 1対多（1つの{other}に複数の{entity}）
+- 多対多（中間テーブルが必要）
+- 1対1
+          </example>
+          <example issue="unclear_ownership">
+「{entity}」は誰が所有しますか？
+- ユーザーごと（user_id が必要）
+- 組織ごと（organisation_id が必要）
+- グローバル（所有者なし）
+          </example>
+          <example issue="unclear_uniqueness">
+「{entity}」で一意にすべき項目は？
+例: メールアドレス、スラッグ、[user_id, name]の組み合わせ
+          </example>
+        </ask_specific_questions>
+        <action>Update understanding based on user response</action>
+        <goto>detect_ambiguity</goto>
+      </branch>
+    </conditional>
+  </step>
+
+  <step id="update_overview_if_needed">
+    <description>If significant details were clarified, offer to update overview spec</description>
+    <conditional>
+      <branch condition="significant_new_info">
+        <prompt lang="ja">
+新しい情報が得られました。概要（core/overview）も更新しますか？
+- 機能説明に詳細を追加
+- ルート定義を修正
+        </prompt>
+        <options>
+          <option id="update">はい、概要も更新 / Yes, update overview</option>
+          <option id="skip">いいえ、テーブル定義のみ / No, table spec only</option>
+        </options>
+        <on_update>
+          <bash>./scripts/blueprint-db-cli.sh get core overview app</bash>
+          <action>Merge new details into overview</action>
+          <bash>./scripts/blueprint-db-cli.sh update {overview_id} '{updated_content}'</bash>
+        </on_update>
+      </branch>
+    </conditional>
   </step>
 
   <step id="generate_spec">
-    <action>Generate table spec in required format</action>
+    <action>Generate table spec in required format with all clarified details</action>
   </step>
 
   <required_content>
@@ -140,9 +209,9 @@ Before running `/init-db`:
       <check>No placeholders (TBD, TODO)</check>
     </validation>
     <on_fail>
-      <prompt lang="ja">以下を明確にしてください：</prompt>
+      <prompt lang="ja">テーブル定義に不足があります：</prompt>
       <list_issues/>
-      <goto>gather_info</goto>
+      <goto>clarify_ambiguity</goto>
     </on_fail>
   </step>
 
@@ -159,17 +228,64 @@ Before running `/init-db`:
 <workflow name="define_seeder">
   <note>Seeders use static data (NO factory, NO faker). Same seeder for dev and test.</note>
 
-  <step id="gather_info">
-    <prompt lang="ja">「{table_name}」のダミーデータについて教えてください</prompt>
-    <questions>
-      <question>どんな種類のデータが必要？ / What types of records?</question>
-      <question>Admin/通常ユーザーなど役割別に必要？ / Need different roles?</question>
-      <question>何件くらい？ / How many records?</question>
-    </questions>
+  <step id="analyze_table_and_overview">
+    <description>Analyze table spec and overview to determine seeder needs</description>
+    <action>Read table spec for columns and relations</action>
+    <action>Check overview for user roles and test scenarios</action>
+    <action>Identify FK dependencies (which seeders must run first)</action>
+  </step>
+
+  <step id="infer_records">
+    <description>Infer necessary records from context</description>
+    <inferences>
+      <inference context="user_roles_in_overview">
+        If overview defines admin/user roles → need admin and regular user records
+      </inference>
+      <inference context="status_column">
+        If table has status column → need records for each status value
+      </inference>
+      <inference context="feature_scenarios">
+        If feature mentions "approval flow" → need approver and submitter records
+      </inference>
+      <inference context="fk_relations">
+        If table has user_id FK → records need valid user IDs from UserSeeder
+      </inference>
+    </inferences>
+  </step>
+
+  <step id="clarify_seeder_needs">
+    <description>Ask targeted questions if test scenarios are unclear</description>
+    <conditional>
+      <branch condition="unclear_scenarios">
+        <prompt lang="ja">
+「{table_name}」のテストデータについて確認させてください：
+        </prompt>
+        <ask_specific_questions>
+          <example issue="unclear_user_types">
+どんな種類の{entity}が必要ですか？
+例: 管理者用、一般ユーザー用、テスト用の無効データ
+          </example>
+          <example issue="unclear_test_scenarios">
+この機能のテストでどんなケースを試しますか？
+例: 正常系、権限エラー、バリデーションエラー
+          </example>
+          <example issue="unclear_relations">
+{parent_entity}との関連で、どの{parent}に紐づけますか？
+（{ParentSeeder}のID: 1=Admin, 2=User を参照）
+          </example>
+          <example issue="unclear_quantity">
+何件くらいのデータが開発・テストに必要ですか？
+最小限（2-3件）で十分か、一覧ページのテスト用に多め（10件以上）か
+          </example>
+        </ask_specific_questions>
+        <action>Update understanding based on user response</action>
+      </branch>
+    </conditional>
   </step>
 
   <step id="generate_spec">
-    <action>Generate seeder spec in required format</action>
+    <action>Generate seeder spec with all clarified details</action>
+    <action>Ensure FK references match actual IDs from parent seeders</action>
   </step>
 
   <required_content>
@@ -239,11 +355,12 @@ Before running `/init-db`:
       <check>Record details show exact PHP array</check>
       <check>Wave number assigned based on dependencies</check>
       <check>No factory() or fake() in record details</check>
+      <check>FK values reference valid IDs from parent seeders</check>
     </validation>
     <on_fail>
-      <prompt lang="ja">以下を明確にしてください：</prompt>
+      <prompt lang="ja">シーダー定義に不足があります：</prompt>
       <list_issues/>
-      <goto>gather_info</goto>
+      <goto>clarify_seeder_needs</goto>
     </on_fail>
   </step>
 
