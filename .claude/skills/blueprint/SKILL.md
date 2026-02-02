@@ -322,42 +322,34 @@ cat .blueprint-language 2>/dev/null || echo "ja"
 
 ---
 
-## Spec Creation Order (CRITICAL)
+## Skill Workflow (CRITICAL)
 
-<workflow name="spec_order">
-  <principle>
-    Specs MUST be created and implemented in this order to respect dependencies:
-  </principle>
+```
+/blueprint → /init-db → /hub
+    ↓           ↓         ↓
+  概要・機能   テーブル    実装
+  UI specs    シーダー
+```
 
-  <order>
-    <step order="1" category="core" type="overview">
-      App overview with features and routes
-    </step>
-    <step order="2" category="data" type="tables">
-      Database tables (migrations + models)
-      - Required before UI pages that use these models
-    </step>
-    <step order="3" category="data" type="seeders">
-      Seeders for each table
-      - Required for development and testing
-      - Must follow table creation order (FK constraints)
-    </step>
-    <step order="4" category="ui" type="pages">
-      UI pages
-      - Depends on tables being defined
-    </step>
-    <step order="5" category="action" type="*">
-      Actions (sync/async/scheduled)
-      - Only when needed (not for page CRUD)
-    </step>
-  </order>
-
-  <dependency_rule>
-    Tables → Seeders → Pages
-    Each seeder depends on its table being done.
-    Pages depend on their data tables being done.
-  </dependency_rule>
+<workflow name="skill_flow">
+  <step order="1" skill="/blueprint">
+    <scope>core/overview, ui/pages, action/*</scope>
+    <output>App overview with features, routes, UI page specs</output>
+  </step>
+  <step order="2" skill="/init-db">
+    <scope>data/tables, data/seeders</scope>
+    <output>Database schema and seeder definitions</output>
+    <prerequisite>core/overview approved</prerequisite>
+  </step>
+  <step order="3" skill="/hub">
+    <scope>Implementation</scope>
+    <output>Actual code files via instructors/coders</output>
+    <prerequisite>All specs approved</prerequisite>
+  </step>
 </workflow>
+
+**This skill handles:** `core/overview`, `ui/pages`, `action/*`
+**For database specs:** Use `/init-db` after overview is approved
 
 ---
 
@@ -371,15 +363,16 @@ cat .blueprint-language 2>/dev/null || echo "ja"
   </step>
 
   <step id="categorize">
-    <description>Auto-categorize each feature</description>
+    <description>Auto-categorize each feature (UI and actions only)</description>
+    <note>Database specs (tables, seeders) are handled by /init-db</note>
     <mapping>
       <rule pattern="list|index|一覧" category="ui" type="pages"/>
       <rule pattern="detail|show|詳細" category="ui" type="pages"/>
-      <rule pattern="create|add|作成" category="ui" type="pages"/>
-      <rule pattern="edit|update|編集" category="ui" type="pages"/>
-      <rule pattern="table|model" category="data" type="tables"/>
-      <rule pattern="seeder" category="data" type="seeders"/>
+      <rule pattern="dashboard|ダッシュボード" category="ui" type="pages"/>
+      <rule pattern="settings|設定" category="ui" type="pages"/>
       <rule pattern="notify|email|通知" category="action" type="async"/>
+      <rule pattern="schedule|定期" category="action" type="scheduled"/>
+      <rule pattern="import|export" category="action" type="async"/>
     </mapping>
   </step>
 
@@ -422,22 +415,18 @@ cat .blueprint-language 2>/dev/null || echo "ja"
 
 ---
 
-## Phase 3: Definition
+## Phase 3: Definition (UI & Actions)
 
 <workflow name="definition_phase">
+  <note>This phase handles ui/pages and action/* specs only. For data/* specs, use /init-db.</note>
+
   <step id="get_draft_specs">
-    <bash>./scripts/blueprint-db-cli.sh list-by-status draft</bash>
+    <bash>./scripts/blueprint-db-cli.sh sql "SELECT * FROM specs WHERE status='draft' AND category IN ('ui', 'action')"</bash>
   </step>
 
   <loop for_each="draft_specs" item="spec">
     <step id="define_spec">
       <conditional>
-        <branch condition="type=tables">
-          <goto>define_table</goto>
-        </branch>
-        <branch condition="type=seeders">
-          <goto>define_seeder</goto>
-        </branch>
         <branch condition="type=pages">
           <goto>define_page</goto>
         </branch>
@@ -465,119 +454,6 @@ cat .blueprint-language 2>/dev/null || echo "ja"
       </conditional>
     </step>
   </loop>
-</workflow>
-
----
-
-### Define Table
-
-<workflow name="define_table">
-  <required_content>
-    ```markdown
-    # Table: {table_name}
-
-    ## Columns
-    | Name | Type | Constraints | Description |
-    |------|------|-------------|-------------|
-    | id | bigint | PK, auto | Primary key |
-    | name | string(255) | required | ... |
-
-    ## Relations
-    | Type | Target | Foreign Key | On Delete |
-    |------|--------|-------------|-----------|
-    | belongsTo | users | user_id | cascade |
-
-    ## Indexes
-    - status (for filtering)
-    - [user_id, created_at] (for user timeline)
-
-    ## Options
-    - timestamps: true
-    - soft_delete: false
-    ```
-  </required_content>
-
-  <quality_checks>
-    <check>All columns have type and description</check>
-    <check>Foreign keys have on_delete behavior</check>
-    <check>Indexes are defined for query patterns</check>
-  </quality_checks>
-</workflow>
-
----
-
-### Define Seeder
-
-<workflow name="define_seeder">
-  <note>Seeders use static data (NO factory, NO faker). Same seeder for dev and test.</note>
-
-  <required_content>
-    ```markdown
-    # Seeder: {table_name}
-
-    ## Target Table
-    - Table: {table_name}
-    - Model: {ModelName}
-    - Depends on: [list of parent seeders that must run first]
-
-    ## Records
-    | ID | Purpose | Key Fields |
-    |----|---------|------------|
-    | 1 | Admin user for testing admin features | name: "Admin", email: "admin@example.com", role: "admin" |
-    | 2 | Regular user for testing user flows | name: "Test User", email: "user@example.com", role: "user" |
-    | 3 | Inactive user for testing inactive state | name: "Inactive", email: "inactive@example.com", is_active: false |
-
-    ## Record Details
-
-    ### Record 1: Admin User
-    ```php
-    [
-        'id' => 1,
-        'name' => 'Admin',
-        'email' => 'admin@example.com',
-        'password' => Hash::make('password'),
-        'role' => 'admin',
-        'is_active' => true,
-    ]
-    ```
-
-    ### Record 2: Regular User
-    ```php
-    [
-        'id' => 2,
-        'name' => 'Test User',
-        'email' => 'user@example.com',
-        'password' => Hash::make('password'),
-        'role' => 'user',
-        'is_active' => true,
-    ]
-    ```
-
-    ## Wave
-    - Wave number: {n} (based on FK dependencies)
-
-    ## Usage
-    - Development: `php artisan db:seed`
-    - Testing: Called in test setup
-    ```
-  </required_content>
-
-  <rules>
-    <rule>NO factory() - all records explicitly defined</rule>
-    <rule>NO faker() - all values are static</rule>
-    <rule>Fixed IDs required when other seeders reference this table</rule>
-    <rule>Each record needs a clear purpose comment</rule>
-    <rule>Minimal but sufficient records for dev/test scenarios</rule>
-  </rules>
-
-  <quality_checks>
-    <check>Target table and model specified</check>
-    <check>Dependencies (parent seeders) listed</check>
-    <check>Each record has ID, purpose, and key fields</check>
-    <check>Record details show exact PHP array</check>
-    <check>Wave number assigned based on dependencies</check>
-    <check>No factory() or fake() in record details</check>
-  </quality_checks>
 </workflow>
 
 ---
@@ -715,11 +591,13 @@ cat .blueprint-language 2>/dev/null || echo "ja"
 
 ---
 
-## Phase 4: Review
+## Phase 4: Review (Overview, UI, Actions)
 
 <workflow name="review_phase">
+  <note>Reviews core/overview, ui/*, action/* specs. Data specs reviewed in /init-db.</note>
+
   <step id="get_pending">
-    <bash>./scripts/blueprint-db-cli.sh pending-review</bash>
+    <bash>./scripts/blueprint-db-cli.sh sql "SELECT * FROM specs WHERE status='pending_review' AND category IN ('core', 'ui', 'action')"</bash>
   </step>
 
   <loop for_each="pending_specs" item="spec">
@@ -751,8 +629,24 @@ cat .blueprint-language 2>/dev/null || echo "ja"
 
   <step id="completion_check">
     <conditional>
-      <branch condition="all_approved">
-        <message lang="ja">全てのスペックが承認されました！ `/hub` で開発を開始できます</message>
+      <branch condition="overview_approved_no_data">
+        <message lang="ja">
+概要が承認されました！
+
+次のステップ:
+1. `/init-db` でデータベース定義（テーブル・シーダー）
+2. `/blueprint` で UI ページ仕様を追加
+3. `/hub` で実装開始
+        </message>
+      </branch>
+      <branch condition="all_ui_approved">
+        <message lang="ja">
+UI・アクション仕様が承認されました！
+
+次のステップ:
+- データベース未定義: `/init-db` を実行
+- 実装開始: `/hub` を実行
+        </message>
       </branch>
     </conditional>
   </step>
