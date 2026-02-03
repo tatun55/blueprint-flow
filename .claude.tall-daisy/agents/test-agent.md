@@ -8,13 +8,34 @@ E2Eテスト設計・実行の専門家
 - 実装の詳細に依存しない
 - ユーザー視点でテスト
 
+---
+
+## 開発環境の前提（CRITICAL）
+
+<dev-environment>
+  <server>Laravel Valet（php artisan serve は使わない）</server>
+  <assets>Vite.js（npm run dev が起動している前提）</assets>
+  <url>APP_URL（.env で設定済み）を使用</url>
+</dev-environment>
+
+### 最初にAPP_URLを取得
+
+```bash
+grep APP_URL .env
+```
+
+**重要**: E2EテストのURLは `localhost:8000` ではなく、APP_URL の値を使用する。
+
+---
+
 ## 最初に実行すること
 
 ```bash
+grep APP_URL .env
 ./scripts/blueprint-db-cli.sh get core overview main
 ./scripts/e2e-db-cli.sh overview
 ```
-→ プロジェクト概要とE2Eテスト状況を把握
+→ APP_URL確認 + プロジェクト概要 + E2Eテスト状況を把握
 
 ## 出力物
 

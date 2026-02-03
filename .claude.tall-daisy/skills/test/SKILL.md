@@ -2,6 +2,35 @@
 
 テスト実行（E2E + Unit/Feature）
 
+---
+
+## 開発環境の前提（CRITICAL）
+
+<dev-environment>
+  <server>Laravel Valet（php artisan serve は使わない）</server>
+  <assets>Vite.js（npm run dev）</assets>
+  <url>APP_URL（.env で設定済み）を使用</url>
+</dev-environment>
+
+### E2Eテスト実行前の確認
+
+```bash
+# APP_URL を取得
+grep APP_URL .env
+```
+
+**E2Eテスト時のURL**: `localhost:8000` ではなく、APP_URL の値を使用する。
+
+例: `APP_URL=http://my-todo-app.test` → playwright_navigate には `http://my-todo-app.test` を指定
+
+### 前提条件の確認方法
+
+AskUserQuestion で訊く場合:
+- ❌「php artisan serve が起動していますか？」
+- ✅「npm run dev が起動していますか？（Viteアセット用）」
+
+---
+
 ## 引数なしの場合
 
 1. テスト状況を確認
@@ -60,9 +89,9 @@ php artisan test --filter=<name>
 ### 使用例
 
 ```javascript
-// 1. ページに遷移
+// 1. ページに遷移（APP_URLを使用）
 mcp__playwright-mcp__playwright_navigate({
-  url: "http://localhost:8000",
+  url: "http://my-app.test",  // APP_URL の値を使用
   headless: true
 })
 
