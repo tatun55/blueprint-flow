@@ -266,7 +266,28 @@ export default () => ({
 
 ---
 
-## Level 1 Feature テスト
+## Level 1 Feature テスト（CRITICAL）
+
+<test-requirement>
+  <principle>
+    Livewire コンポーネント実装時は Feature テストも必ず作成・実行する。
+    テストなしで実装完了としてはならない。
+  </principle>
+
+  <required-tests>
+    <test>ページが正常に表示されること (assertStatus 200)</test>
+    <test>主要な操作が動作すること (create/update/delete)</test>
+    <test>バリデーションエラーが表示されること</test>
+  </required-tests>
+
+  <required-commands>
+    <command>php artisan test tests/Feature/Livewire/{Component}Test.php</command>
+  </required-commands>
+
+  <completion-criteria>
+    テストがすべてパスするまで実装完了としない。
+  </completion-criteria>
+</test-requirement>
 
 ```php
 use Livewire\Livewire;

@@ -244,7 +244,28 @@ public function run(): void
 
 ---
 
-## Level 1 Unit テスト
+## Level 1 Unit テスト（CRITICAL）
+
+<test-requirement>
+  <principle>
+    テーブル実装時は Unit テストも必ず作成・実行する。
+    テストなしで実装完了としてはならない。
+  </principle>
+
+  <required-tests>
+    <test>Model の create が動作すること</test>
+    <test>リレーションが正しく定義されていること</test>
+    <test>fillable/casts が正しく設定されていること</test>
+  </required-tests>
+
+  <required-commands>
+    <command>php artisan test tests/Unit/Models/{Model}Test.php</command>
+  </required-commands>
+
+  <completion-criteria>
+    テストがすべてパスするまで実装完了としない。
+  </completion-criteria>
+</test-requirement>
 
 ```php
 // tests/Unit/Models/UserTest.php

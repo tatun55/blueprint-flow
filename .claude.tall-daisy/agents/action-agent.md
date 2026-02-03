@@ -172,7 +172,28 @@ Schedule: `Schedule::command('app:cleanup-old-data')->daily();`
 
 ---
 
-## Level 1 Unit テスト
+## Level 1 Unit テスト（CRITICAL）
+
+<test-requirement>
+  <principle>
+    Action/Job/Command 実装時は Unit テストも必ず作成・実行する。
+    テストなしで実装完了としてはならない。
+  </principle>
+
+  <required-tests>
+    <test>メインロジックが正しく動作すること</test>
+    <test>イベントが正しくdispatchされること</test>
+    <test>エラーケースが適切にハンドリングされること</test>
+  </required-tests>
+
+  <required-commands>
+    <command>php artisan test tests/Unit/Actions/{Action}Test.php</command>
+  </required-commands>
+
+  <completion-criteria>
+    テストがすべてパスするまで実装完了としない。
+  </completion-criteria>
+</test-requirement>
 
 ```php
 test('CreateUser action creates user and dispatches event', function () {
