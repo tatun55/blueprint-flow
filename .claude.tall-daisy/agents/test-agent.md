@@ -10,32 +10,42 @@ E2Eテスト設計・実行の専門家
 
 ---
 
-## 開発環境の前提（CRITICAL）
+## 開発環境の前提
 
 <dev-environment>
-  <server>Laravel Valet（php artisan serve は使わない）</server>
-  <assets>Vite.js（npm run dev が起動している前提）</assets>
-  <url>APP_URL（.env で設定済み）を使用</url>
+  <server>Laravel Valet（常にAPP_URLでホスティング済み）</server>
+  <assets>Vite.js（npm run dev）</assets>
+  <url>APP_URL（.env）を使用</url>
 </dev-environment>
-
-### 最初にAPP_URLを取得
-
-```bash
-grep APP_URL .env
-```
-
-**重要**: E2EテストのURLは `localhost:8000` ではなく、APP_URL の値を使用する。
 
 ---
 
 ## 最初に実行すること
 
+<e2e-setup-flow>
+  <step name="1-get-app-url">
+    <command>grep APP_URL .env | cut -d '=' -f2</command>
+    <purpose>テスト対象URLを取得</purpose>
+  </step>
+
+  <step name="2-ensure-vite">
+    <check>lsof -i :5173</check>
+    <if-not-running>npm run dev（バックグラウンド実行）</if-not-running>
+  </step>
+
+  <step name="3-get-context">
+    <command>./scripts/blueprint-db-cli.sh get core overview main</command>
+    <command>./scripts/e2e-db-cli.sh overview</command>
+  </step>
+</e2e-setup-flow>
+
 ```bash
-grep APP_URL .env
+# セットアップコマンド
+APP_URL=$(grep APP_URL .env | cut -d '=' -f2)
+lsof -i :5173 > /dev/null 2>&1 || (npm run dev &; sleep 3)
 ./scripts/blueprint-db-cli.sh get core overview main
 ./scripts/e2e-db-cli.sh overview
 ```
-→ APP_URL確認 + プロジェクト概要 + E2Eテスト状況を把握
 
 ## 出力物
 
