@@ -98,12 +98,13 @@ case "$1" in
 
     add)
         E2E_STATUS=$(set_e2e_for_ui "$2" "$3")
+        # INSERTとlast_insert_rowid()を同じコネクションで実行してIDを正しく取得
         if [[ "$E2E_STATUS" == "NULL" ]]; then
-            sqlite3 "$DB_PATH" "INSERT INTO specs (category, type, slug, name, data, status, e2e_status) VALUES ('$2', '$3', '$4', '$5', '$6', 'draft', NULL);"
+            NEW_ID=$(sqlite3 "$DB_PATH" "INSERT INTO specs (category, type, slug, name, data, status, e2e_status) VALUES ('$2', '$3', '$4', '$5', '$6', 'draft', NULL); SELECT last_insert_rowid();")
         else
-            sqlite3 "$DB_PATH" "INSERT INTO specs (category, type, slug, name, data, status, e2e_status) VALUES ('$2', '$3', '$4', '$5', '$6', 'draft', '$E2E_STATUS');"
+            NEW_ID=$(sqlite3 "$DB_PATH" "INSERT INTO specs (category, type, slug, name, data, status, e2e_status) VALUES ('$2', '$3', '$4', '$5', '$6', 'draft', '$E2E_STATUS'); SELECT last_insert_rowid();")
         fi
-        echo "{\"success\": true, \"id\": $(sqlite3 "$DB_PATH" "SELECT last_insert_rowid();")}"
+        echo "{\"success\": true, \"id\": $NEW_ID}"
         ;;
 
     update)
@@ -221,8 +222,9 @@ case "$1" in
 
     # Task commands
     task-add)
-        sqlite3 "$DB_PATH" "INSERT INTO tasks (spec_id, agent_type, content, status) VALUES ($2, '$3', '$4', 'pending');"
-        echo "{\"success\": true, \"id\": $(sqlite3 "$DB_PATH" "SELECT last_insert_rowid();")}"
+        # INSERTとlast_insert_rowid()を同じコネクションで実行してIDを正しく取得
+        NEW_ID=$(sqlite3 "$DB_PATH" "INSERT INTO tasks (spec_id, agent_type, content, status) VALUES ($2, '$3', '$4', 'pending'); SELECT last_insert_rowid();")
+        echo "{\"success\": true, \"id\": $NEW_ID}"
         ;;
 
     task-get)
