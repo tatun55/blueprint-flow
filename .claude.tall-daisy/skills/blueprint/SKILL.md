@@ -77,9 +77,62 @@ git commit -m "Update blueprint-flow submodule"
 
 specが0件の場合、以下の手順で開始:
 
-### ステップ1: プロジェクト情報を一括収集
+<new-project-flow>
+  <principle>
+    各specアイテムをDB登録する前に、必ずAskUserQuestionで確認する。
+    overviewのfeaturesは概要リストであり、それに基づいて各機能の詳細specを
+    1つずつAskUserQuestionで確認しながら作成する。
+  </principle>
 
-AskUserQuestionで以下を**1回でまとめて**質問:
+  <step name="1-collect-info">
+    <action>プロジェクト情報を収集</action>
+    <method>AskUserQuestion</method>
+    <questions>
+      <question>アプリの種類は？（シンプル / 認証あり / チーム共有型）</question>
+      <question>主要機能は？（CRUD基本 / +カテゴリ機能 / +検索機能 / カスタム）</question>
+    </questions>
+  </step>
+
+  <step name="2-create-overview">
+    <action>overview spec を作成（まだDB登録しない）</action>
+    <content>概要、機能リスト、要件、対象外、技術スタック</content>
+  </step>
+
+  <step name="3-confirm-overview">
+    <action>AskUserQuestion で overview を確認</action>
+    <display>表形式で機能一覧を表示</display>
+    <on-approve>DB登録 → approved</on-approve>
+    <on-reject>修正して再確認</on-reject>
+  </step>
+
+  <step name="4-expand-features">
+    <action>featuresに基づいて詳細specを順次作成</action>
+    <for-each feature="features">
+      <sub-step name="4a-tables">
+        <condition>機能にDBテーブルが必要な場合</condition>
+        <action>data/tables spec を作成</action>
+        <method>AskUserQuestion でカラム定義を確認</method>
+        <on-approve>DB登録</on-approve>
+      </sub-step>
+      <sub-step name="4b-pages">
+        <condition>機能にUIページがある場合</condition>
+        <action>ui/pages spec を作成</action>
+        <method>AskUserQuestion でASCIIアートレイアウトを確認</method>
+        <display>ASCIIアートを表示して確認</display>
+        <on-approve>DB登録</on-approve>
+      </sub-step>
+    </for-each>
+  </step>
+
+  <step name="5-complete">
+    <action>全spec作成完了を報告</action>
+    <next>/db または /coding で実装開始</next>
+  </step>
+</new-project-flow>
+
+### ステップ1: プロジェクト情報を収集
+
+AskUserQuestionで質問:
 
 ```
 1. アプリの種類は？ (シンプル / 認証あり / チーム共有型)
@@ -88,7 +141,7 @@ AskUserQuestionで以下を**1回でまとめて**質問:
 
 ### ステップ2: overview spec を作成
 
-収集した情報から overview spec を自動生成。
+収集した情報から overview spec を生成（**まだDB登録しない**）。
 
 #### 必須項目
 
@@ -129,27 +182,55 @@ overviewには**必ず機能リスト（features）を含める**。
     }
   ]
 }
-
-// ❌ 悪い例: 操作ごとに分割
-{
-  "features": [
-    {"id": "F001", "name": "タスク一覧表示", "description": "..."},
-    {"id": "F002", "name": "タスク作成", "description": "..."},
-    {"id": "F003", "name": "タスク完了", "description": "..."},
-    {"id": "F004", "name": "タスク削除", "description": "..."}
-  ]
-}
 ```
 
-**理由**: ページ単位でまとめることで:
-- ui/pages specとの1:1対応が明確になる
-- 実装の見通しが立てやすい
-- 冗長なspec作成を防げる
+### ステップ3: AskUserQuestion で overview を確認
 
-### ステップ3: レビュー依頼
+表形式で表示し、**承認を得てからDB登録**する。
 
-作成したspecを表形式で表示し、レビューを依頼。
-承認後、status を `approved` に更新。
+### ステップ4: featuresに基づいて詳細specを作成
+
+overview承認後、featuresの各機能に対して詳細specを**1つずつ**作成する。
+
+#### 4a. data/tables spec（テーブル定義）
+
+```
+AskUserQuestion:
+「{テーブル名}テーブルを以下の構成で作成します:
+- カラム: id, title, completed, timestamps
+- インデックス: なし
+よろしいですか？」
+```
+
+承認後、DB登録。
+
+#### 4b. ui/pages spec（ページ定義）
+
+**必ずASCIIアートでレイアウトを示してから確認**:
+
+```
+AskUserQuestion:
+「{ページ名}のレイアウトです:
+
+┌─────────────────────────────────────┐
+│  header: Todo App                   │
+├─────────────────────────────────────┤
+│  [新しいタスクを入力...] [追加]      │
+├─────────────────────────────────────┤
+│  ☑ タスク1 (打消線)        [削除]   │
+│  ☐ タスク2                 [削除]   │
+└─────────────────────────────────────┘
+
+このレイアウトでよいですか？」
+```
+
+承認後、DB登録。
+
+### ステップ5: 全spec作成完了
+
+全ての詳細spec作成後、次のステップを案内:
+- `/db` でDB実装
+- `/coding` でUI実装
 
 ---
 
