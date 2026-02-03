@@ -316,22 +316,22 @@ Blueprintは以下の要件を満たす必要がある：
 
 ### 使用するCLIコマンド
 ```bash
-./blueprint/db-cli.sh overview         # 全spec一覧
-./blueprint/db-cli.sh progress         # status別の進捗
-./blueprint/db-cli.sh available        # 実装可能なspec
-./blueprint/db-cli.sh pending-review   # レビュー待ち
-./blueprint/db-cli.sh needs-attention  # 要対応
-./blueprint/db-cli.sh add <cat> <type> <slug> <name> '<json>'  # 追加
-./blueprint/db-cli.sh update <id> '<json>'                      # 更新
-./blueprint/db-cli.sh status <id> <status>                      # ステータス変更
+./scripts/blueprint-db-cli.sh overview         # 全spec一覧
+./scripts/blueprint-db-cli.sh progress         # status別の進捗
+./scripts/blueprint-db-cli.sh available        # 実装可能なspec
+./scripts/blueprint-db-cli.sh pending-review   # レビュー待ち
+./scripts/blueprint-db-cli.sh needs-attention  # 要対応
+./scripts/blueprint-db-cli.sh add <cat> <type> <slug> <name> '<json>'  # 追加
+./scripts/blueprint-db-cli.sh update <id> '<json>'                      # 更新
+./scripts/blueprint-db-cli.sh status <id> <status>                      # ステータス変更
 ```
 
 ### 振る舞いフロー
 
 #### 引数なしの場合
 ```
-1. ./blueprint/db-cli.sh overview で全spec取得
-2. ./blueprint/db-cli.sh progress で進捗サマリー取得
+1. ./scripts/blueprint-db-cli.sh overview で全spec取得
+2. ./scripts/blueprint-db-cli.sh progress で進捗サマリー取得
 3. 状況を分析:
    - draft が多い → 「仕様策定を続けますか？」
    - pending_review が多い → 「レビュー待ちが N件あります」
@@ -384,7 +384,7 @@ DB設計・変更の指示とdb-agentの起動
 #### 引数なしの場合
 ```
 1. ls database/migrations/ で既存マイグレーション確認
-2. ./blueprint/db-cli.sh list data tables で関連spec確認
+2. ./scripts/blueprint-db-cli.sh list data tables で関連spec確認
 3. AskUserQuestion で何をしたいか確認:
    - 「新しいテーブルを追加」
    - 「既存テーブルにカラム追加」
@@ -423,7 +423,7 @@ DB設計・変更の指示とdb-agentの起動
 
 #### 引数なしの場合
 ```
-1. ./blueprint/db-cli.sh available-with-deps で実装可能spec取得
+1. ./scripts/blueprint-db-cli.sh available-with-deps で実装可能spec取得
 2. specがある場合、AskUserQuestion で選択を促す
 3. specがない場合、「approvedのspecがありません」と通知
 4. 選択されたspecに応じてAgentを起動:
@@ -463,10 +463,10 @@ DB設計・変更の指示とdb-agentの起動
 
 ### 使用するCLIコマンド
 ```bash
-./tests/e2e/db-cli.sh overview         # 全テストケース
-./tests/e2e/db-cli.sh attention        # 要対応
-./tests/e2e/db-cli.sh pending-review   # レビュー待ち
-./tests/e2e/db-cli.sh spec-summary     # spec別サマリー
+./scripts/e2e-db-cli.sh overview         # 全テストケース
+./scripts/e2e-db-cli.sh attention        # 要対応
+./scripts/e2e-db-cli.sh pending-review   # レビュー待ち
+./scripts/e2e-db-cli.sh spec-summary     # spec別サマリー
 php artisan test                        # Unit/Feature テスト
 php artisan test --filter=<name>        # 特定テスト
 ```
@@ -475,8 +475,8 @@ php artisan test --filter=<name>        # 特定テスト
 
 #### 引数なしの場合
 ```
-1. ./tests/e2e/db-cli.sh overview でE2Eテスト状況取得
-2. ./tests/e2e/db-cli.sh attention で要対応テスト確認
+1. ./scripts/e2e-db-cli.sh overview でE2Eテスト状況取得
+2. ./scripts/e2e-db-cli.sh attention で要対応テスト確認
 3. 分析してAskUserQuestionで提示:
    - 「未実行のE2Eテストが N件あります。実行しますか？」
    - 「失敗したテストが N件あります。再実行しますか？」
@@ -506,7 +506,7 @@ DB設計・実装の専門家（Migration, Model, Seeder, Factory）
 
 ### 最初に実行すること
 ```bash
-./blueprint/db-cli.sh get core overview main
+./scripts/blueprint-db-cli.sh get core overview main
 ```
 → プロジェクト概要を把握
 
@@ -688,7 +688,7 @@ UI実装の専門家（Livewire Component + Blade 一体開発）
 
 ### 最初に実行すること
 ```bash
-./blueprint/db-cli.sh get core overview main
+./scripts/blueprint-db-cli.sh get core overview main
 ```
 → プロジェクト概要を把握
 
@@ -920,7 +920,7 @@ test('can create user', function () {
 
 ### 最初に実行すること
 ```bash
-./blueprint/db-cli.sh get core overview main
+./scripts/blueprint-db-cli.sh get core overview main
 ```
 → プロジェクト概要を把握
 
@@ -1091,8 +1091,8 @@ E2Eテスト設計・実行の専門家
 
 ### 最初に実行すること
 ```bash
-./blueprint/db-cli.sh get core overview main
-./tests/e2e/db-cli.sh overview
+./scripts/blueprint-db-cli.sh get core overview main
+./scripts/e2e-db-cli.sh overview
 ```
 → プロジェクト概要とE2Eテスト状況を把握
 
@@ -1103,11 +1103,11 @@ E2Eテスト設計・実行の専門家
 
 ### 使用するCLIコマンド
 ```bash
-./tests/e2e/db-cli.sh add <slug> <name> <url> [viewport] [spec_id] [level]
-./tests/e2e/db-cli.sh run <slug>
-./tests/e2e/db-cli.sh result <run_id> <passed|failed> [notes]
-./tests/e2e/db-cli.sh screenshot <run_id> <type> <path>
-./tests/e2e/db-cli.sh reviewed <run_id>
+./scripts/e2e-db-cli.sh add <slug> <name> <url> [viewport] [spec_id] [level]
+./scripts/e2e-db-cli.sh run <slug>
+./scripts/e2e-db-cli.sh result <run_id> <passed|failed> [notes]
+./scripts/e2e-db-cli.sh screenshot <run_id> <type> <path>
+./scripts/e2e-db-cli.sh reviewed <run_id>
 ```
 
 ### 埋め込む専門知識
@@ -1135,13 +1135,13 @@ mcp__playwright-mcp__playwright_close      # 必ず閉じる
 
 ### テスト実行フロー
 ```
-1. ./tests/e2e/db-cli.sh run <slug> でrun_id取得
+1. ./scripts/e2e-db-cli.sh run <slug> でrun_id取得
 2. playwright_navigate でページ遷移
 3. playwright_screenshot で初期状態を保存
 4. 操作を実行
 5. playwright_screenshot で操作後状態を保存
-6. ./tests/e2e/db-cli.sh result <run_id> passed|failed
-7. ./tests/e2e/db-cli.sh screenshot <run_id> <type> <path>
+6. ./scripts/e2e-db-cli.sh result <run_id> passed|failed
+7. ./scripts/e2e-db-cli.sh screenshot <run_id> <type> <path>
 8. playwright_close で終了
 ```
 

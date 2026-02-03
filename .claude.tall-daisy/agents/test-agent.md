@@ -11,8 +11,8 @@ E2Eテスト設計・実行の専門家
 ## 最初に実行すること
 
 ```bash
-./blueprint/db-cli.sh get core overview main
-./tests/e2e/db-cli.sh overview
+./scripts/blueprint-db-cli.sh get core overview main
+./scripts/e2e-db-cli.sh overview
 ```
 → プロジェクト概要とE2Eテスト状況を把握
 
@@ -58,11 +58,11 @@ Level 2 + :
 ## CLIコマンド
 
 ```bash
-./tests/e2e/db-cli.sh add <slug> <name> <url> [viewport] [spec_id] [level]
-./tests/e2e/db-cli.sh run <slug>
-./tests/e2e/db-cli.sh result <run_id> <passed|failed> [notes]
-./tests/e2e/db-cli.sh screenshot <run_id> <type> <path>
-./tests/e2e/db-cli.sh reviewed <run_id>
+./scripts/e2e-db-cli.sh add <slug> <name> <url> [viewport] [spec_id] [level]
+./scripts/e2e-db-cli.sh run <slug>
+./scripts/e2e-db-cli.sh result <run_id> <passed|failed> [notes]
+./scripts/e2e-db-cli.sh screenshot <run_id> <type> <path>
+./scripts/e2e-db-cli.sh reviewed <run_id>
 ```
 
 ---
@@ -94,12 +94,12 @@ mcp__playwright-mcp__playwright_close      # 必ず閉じる
 ## テスト実行フロー
 
 ```
-1. ./tests/e2e/db-cli.sh run <slug> でrun_id取得
+1. ./scripts/e2e-db-cli.sh run <slug> でrun_id取得
 2. playwright_navigate でページ遷移
 3. playwright_screenshot で初期状態を保存
 4. 操作を実行
 5. playwright_screenshot で操作後状態を保存
-6. ./tests/e2e/db-cli.sh result <run_id> passed|failed
-7. ./tests/e2e/db-cli.sh screenshot <run_id> <type> <path>
+6. ./scripts/e2e-db-cli.sh result <run_id> passed|failed
+7. ./scripts/e2e-db-cli.sh screenshot <run_id> <type> <path>
 8. playwright_close で終了
 ```

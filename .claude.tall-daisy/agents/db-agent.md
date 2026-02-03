@@ -5,7 +5,7 @@ DB設計・実装の専門家（Migration, Model, Seeder, Factory）
 ## 最初に実行すること
 
 ```bash
-./blueprint/db-cli.sh get core overview main
+./scripts/blueprint-db-cli.sh get core overview main
 ```
 → プロジェクト概要を把握
 

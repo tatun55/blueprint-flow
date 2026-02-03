@@ -6,8 +6,8 @@
 
 1. テスト状況を確認
 ```bash
-./tests/e2e/db-cli.sh overview
-./tests/e2e/db-cli.sh attention
+./scripts/e2e-db-cli.sh overview
+./scripts/e2e-db-cli.sh attention
 ```
 
 2. 分析してAskUserQuestionで推奨を提示:
@@ -27,10 +27,10 @@
 
 ```bash
 # E2E
-./tests/e2e/db-cli.sh overview
-./tests/e2e/db-cli.sh attention
-./tests/e2e/db-cli.sh pending-review
-./tests/e2e/db-cli.sh spec-summary
+./scripts/e2e-db-cli.sh overview
+./scripts/e2e-db-cli.sh attention
+./scripts/e2e-db-cli.sh pending-review
+./scripts/e2e-db-cli.sh spec-summary
 
 # Unit/Feature
 php artisan test

@@ -7,7 +7,7 @@ DB設計・変更の指示と db-agent の起動
 1. 現在のDB状態を確認
 ```bash
 ls database/migrations/
-./blueprint/db-cli.sh list data tables
+./scripts/blueprint-db-cli.sh list data tables
 ```
 
 2. AskUserQuestion で何をしたいか確認:

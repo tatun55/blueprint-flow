@@ -21,8 +21,8 @@ cd .blueprint-flow && git pull origin main && cd ..
 
 1. プロジェクト状況を確認
 ```bash
-./blueprint/db-cli.sh overview
-./blueprint/db-cli.sh progress
+./scripts/blueprint-db-cli.sh overview
+./scripts/blueprint-db-cli.sh progress
 ```
 
 2. 状況を分析して推奨アクションをAskUserQuestionで提示
@@ -52,14 +52,14 @@ cd .blueprint-flow && git pull origin main && cd ..
 ## CLIコマンド
 
 ```bash
-./blueprint/db-cli.sh overview         # 全spec一覧
-./blueprint/db-cli.sh progress         # status別の進捗
-./blueprint/db-cli.sh available        # 実装可能なspec
-./blueprint/db-cli.sh pending-review   # レビュー待ち
-./blueprint/db-cli.sh needs-attention  # 要対応
-./blueprint/db-cli.sh add <cat> <type> <slug> <name> '<json>'
-./blueprint/db-cli.sh update <id> '<json>'
-./blueprint/db-cli.sh status <id> <status>
+./scripts/blueprint-db-cli.sh overview         # 全spec一覧
+./scripts/blueprint-db-cli.sh progress         # status別の進捗
+./scripts/blueprint-db-cli.sh available        # 実装可能なspec
+./scripts/blueprint-db-cli.sh pending-review   # レビュー待ち
+./scripts/blueprint-db-cli.sh needs-attention  # 要対応
+./scripts/blueprint-db-cli.sh add <cat> <type> <slug> <name> '<json>'
+./scripts/blueprint-db-cli.sh update <id> '<json>'
+./scripts/blueprint-db-cli.sh status <id> <status>
 ```
 
 ## Status Flow

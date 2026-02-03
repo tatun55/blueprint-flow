@@ -6,7 +6,7 @@
 
 1. 実装可能なspecを確認
 ```bash
-./blueprint/db-cli.sh available-with-deps
+./scripts/blueprint-db-cli.sh available-with-deps
 ```
 
 2. specがある場合、AskUserQuestion で選択を促す
