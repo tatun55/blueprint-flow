@@ -15,6 +15,36 @@ cd .blueprint-flow && git pull origin main && cd ..
 
 実行後、変更内容を報告。
 
+### `/blueprint push`
+
+blueprint-flowサブモジュールへの変更をリモートにpushする。
+
+**手順:**
+
+1. サブモジュール内の変更を確認
+```bash
+git -C .blueprint-flow status
+```
+
+2. 変更があればコミット（未コミットの場合）
+```bash
+git -C .blueprint-flow add -A
+git -C .blueprint-flow commit -m "説明"
+```
+
+3. リモートにpush
+```bash
+git -C .blueprint-flow push origin main
+```
+
+4. 親リポジトリでサブモジュール参照を更新
+```bash
+git add .blueprint-flow
+git commit -m "Update blueprint-flow submodule"
+```
+
+**注意**: pushする前にユーザーに変更内容を確認してもらう。
+
 ---
 
 ## 引数なしの場合
