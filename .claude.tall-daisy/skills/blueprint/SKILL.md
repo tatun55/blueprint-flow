@@ -215,15 +215,48 @@ Types:
 
 ### ui/pages テンプレート
 
+**必須**: アスキーアートでレイアウトを示す
+
 ```bash
-./scripts/blueprint-db-cli.sh add ui pages task-index "タスク一覧" '{
-  "route": "/tasks",
-  "component": "Pages/Tasks/Index",
-  "features": ["一覧表示", "作成", "完了切替", "削除"],
-  "wireModel": ["tasks"],
-  "actions": ["create", "toggle", "delete"]
+./scripts/blueprint-db-cli.sh add ui pages todo-index "Todoメインページ" '{
+  "route": "/",
+  "component": "Pages/TodoIndex",
+  "layout_ascii": "┌─────────────────────────────────────┐\n│  header: Todo App                   │\n├─────────────────────────────────────┤\n│  [新しいタスクを入力...] [追加]      │\n├─────────────────────────────────────┤\n│  ☑ タスク1 (打消線)        [削除]   │\n│  ☐ タスク2                 [削除]   │\n└─────────────────────────────────────┘",
+  "modals": [],
+  "operations": ["一覧表示", "新規作成", "完了切替", "削除"],
+  "wireModel": ["tasks", "newTaskTitle"],
+  "methods": ["mount", "addTask", "toggleComplete", "deleteTask"]
 }'
 ```
+
+#### アスキーアートガイドライン
+
+1. **全体レイアウト**: ページの構造を示す
+```
+┌───────────────────────────────────────────────────┐
+│  Logo                  Search...           Avatar  │  ← fixed top bar
+├───────────────┬───────────────────────────────────┤
+│  Sidebar      │               Main Content        │
+│  w-64         │                                   │
+│  - Item 1     │  ┌─────────────────────────────┐  │
+│  - Item 2     │  │ Content Area               │  │
+│  - Item 3     │  └─────────────────────────────┘  │
+└───────────────┴───────────────────────────────────┘
+```
+
+2. **モーダル**: 別途アスキーアートで示す
+```
+┌─────────────────────────────────┐
+│  Modal Title              [×]  │
+├─────────────────────────────────┤
+│  Form content here             │
+│  [Input field               ]  │
+│                                │
+│         [Cancel] [Save]        │
+└─────────────────────────────────┘
+```
+
+3. **レスポンシブ**: モバイル/デスクトップの違いがある場合は両方示す
 
 ---
 
