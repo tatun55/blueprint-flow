@@ -314,3 +314,98 @@ draft → pending_review → approved → in_progress → impl_review → testin
 2. **テンプレートを活用** - 必須項目の漏れを防ぐ
 3. **具体例を示す** - 抽象的な質問を避ける
 4. **レビュー前にチェック** - 品質基準を満たしているか確認
+
+---
+
+## 人間コラボレーションガイドライン
+
+適切な頻度で人間の判断を取り入れながら開発を進める。
+
+<collaboration-flow>
+  <principle>
+    人間との協働を重視し、重要な判断ポイントでAskUserQuestionを使用する。
+    ただし、過度な確認は避け、効率とのバランスを取る。
+  </principle>
+
+  <checkpoint name="spec-creation">
+    <description>仕様作成時の確認ポイント</description>
+    <timing>spec作成後、status変更前</timing>
+    <method>AskUserQuestion</method>
+    <content>作成したspecの内容を表形式で提示し、承認を求める</content>
+  </checkpoint>
+
+  <checkpoint name="ui-implementation">
+    <description>UI実装の確認</description>
+    <condition>ui/pages または ui/layouts のspec</condition>
+    <method>playwright-mcp screenshot</method>
+    <flow>
+      <step>playwright_navigate で該当ページに遷移 (headless: true)</step>
+      <step>playwright_screenshot でスクリーンショット取得</step>
+      <step>スクリーンショットをユーザーに提示</step>
+      <step>AskUserQuestion で確認（レイアウト・デザインの意図通りか）</step>
+      <step>playwright_close で終了</step>
+    </flow>
+  </checkpoint>
+
+  <checkpoint name="non-ui-confirmation">
+    <description>非UI（data, action, core）の確認</description>
+    <method>簡潔な説明文</method>
+    <rules>
+      <rule>無駄のない必要十分な説明</rule>
+      <rule>技術的詳細は箇条書きで簡潔に</rule>
+      <rule>変更の影響範囲を明示</rule>
+    </rules>
+    <example>
+      tasksテーブルを作成します:
+      - カラム: id, title, completed, timestamps
+      - インデックス: なし
+      よろしいですか？
+    </example>
+  </checkpoint>
+
+  <checkpoint name="status-transition">
+    <description>重要なステータス変更時</description>
+    <transitions>
+      <transition from="draft" to="pending_review">確認必須</transition>
+      <transition from="pending_review" to="approved">人間の承認必須</transition>
+      <transition from="in_progress" to="impl_review">実装完了報告</transition>
+    </transitions>
+  </checkpoint>
+</collaboration-flow>
+
+### AskUserQuestion使用タイミング
+
+| タイミング | 必須/推奨 | 内容 |
+|-----------|----------|------|
+| spec作成後 | 必須 | 内容の承認 |
+| UI実装後 | 必須 | スクショ付きで確認 |
+| status変更 | 推奨 | 次のフェーズへの移行確認 |
+| 曖昧な要件 | 必須 | 詳細の確認 |
+| 複数選択肢 | 推奨 | 方針決定 |
+
+### playwright-mcp スクリーンショット
+
+UI確認には `playwright-mcp` を積極的に使用する。
+
+```javascript
+// 1. ページに遷移
+mcp__playwright-mcp__playwright_navigate({
+  url: "http://localhost:8000/path",
+  headless: true
+})
+
+// 2. スクリーンショット取得
+mcp__playwright-mcp__playwright_screenshot({
+  name: "page-name_state",
+  savePng: true,
+  fullPage: true
+})
+
+// 3. 終了（必須）
+mcp__playwright-mcp__playwright_close()
+```
+
+**命名規則**: `{page-slug}_{state}.png`
+- `todo-index_initial.png`
+- `todo-index_after-add.png`
+- `task-modal_open.png`
