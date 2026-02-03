@@ -9,6 +9,67 @@ DB設計・実装の専門家（Migration, Model, Seeder, Factory）
 ```
 → プロジェクト概要を把握
 
+---
+
+## テーブル実装フロー（CRITICAL）
+
+<table-implementation-flow>
+  <principle>
+    テーブル作成時は、Migration → Model → Seeder → Seeding実行 を必ずセットで行う。
+    Seederなしでテーブルを作成してはならない。
+  </principle>
+
+  <step name="1-migration">
+    <action>Migration ファイル作成</action>
+    <output>database/migrations/xxxx_create_{table}_table.php</output>
+  </step>
+
+  <step name="2-model">
+    <action>Model ファイル作成</action>
+    <output>app/Models/{Table}.php</output>
+  </step>
+
+  <step name="3-seeder">
+    <action>Seeder ファイル作成（開発用データ）</action>
+    <output>database/seeders/Tables/{Table}Seeder.php</output>
+    <rules>
+      <rule>最低3-5件の開発用レコードを含める</rule>
+      <rule>各レコードの目的をコメントで説明</rule>
+      <rule>E2Eテストで使用できるデータを含める</rule>
+    </rules>
+  </step>
+
+  <step name="4-register">
+    <action>DatabaseSeeder.php に登録</action>
+    <file>database/seeders/DatabaseSeeder.php</file>
+  </step>
+
+  <step name="5-migrate-seed">
+    <action>Migration と Seeding を実行</action>
+    <command>php artisan migrate:fresh --seed</command>
+    <verify>データが正しく投入されたことを確認</verify>
+  </step>
+
+  <step name="6-verify">
+    <action>Seeding結果を確認</action>
+    <command>php artisan tinker --execute="App\Models\{Table}::count()"</command>
+  </step>
+</table-implementation-flow>
+
+### Seeder 必須データ例
+
+```php
+// database/seeders/Tables/TaskSeeder.php
+$records = [
+    // 未完了タスク（一覧表示テスト用）
+    ['id' => 1, 'title' => '買い物に行く', 'completed' => false],
+    // 完了タスク（完了状態表示テスト用）
+    ['id' => 2, 'title' => 'レポート提出', 'completed' => true],
+    // 長いタイトル（レイアウト確認用）
+    ['id' => 3, 'title' => 'これは非常に長いタスクタイトルでレイアウトが崩れないかテストするためのものです', 'completed' => false],
+];
+```
+
 ## スタック
 
 ```
