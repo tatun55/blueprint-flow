@@ -59,7 +59,7 @@ git commit -m "Update blueprint-flow submodule"
    - spec が 0件 → 新規プロジェクト開始フローへ
    - draft が多い → 「仕様策定を続けますか？」
    - pending_review が多い → 「レビュー待ちが N件あります」
-   - approved が多い → 「/db または /coding で実装を開始できます」
+   - approved が多い → 「/coding で実装を開始できます」
    - in_progress が多い → 「実装中のspecがN件あります」
 
 ## 引数ありの場合
@@ -110,8 +110,9 @@ specが0件の場合、以下の手順で開始:
     <for-each feature="features">
       <sub-step name="4a-tables">
         <condition>機能にDBテーブルが必要な場合</condition>
-        <action>data/tables spec を作成</action>
-        <method>AskUserQuestion でカラム定義を確認</method>
+        <action>data/tables spec を作成（カラム + シーダー）</action>
+        <method>AskUserQuestion でカラム定義とシーダーデータを確認</method>
+        <display>カラム一覧表 + シーダーサンプル3-5件</display>
         <on-approve>DB登録</on-approve>
       </sub-step>
       <sub-step name="4b-pages">
@@ -126,7 +127,7 @@ specが0件の場合、以下の手順で開始:
 
   <step name="5-complete">
     <action>全spec作成完了を報告</action>
-    <next>/db または /coding で実装開始</next>
+    <next>/coding で実装開始（テーブル・シーダー・UI全て）</next>
   </step>
 </new-project-flow>
 
@@ -151,7 +152,16 @@ overviewには**必ず機能リスト（features）を含める**。
 {
   "description": "アプリの概要説明",
   "features": [
-    {"id": "F001", "name": "機能名", "description": "機能説明", "priority": "必須/任意"}
+    {
+      "id": "F001",
+      "name": "機能名",
+      "description": "機能説明",
+      "priority": "必須/任意",
+      "depends_on": ["data/tables/tasks"]
+    }
+  ],
+  "tables": [
+    {"slug": "tasks", "name": "タスク", "description": "タスク情報を保存"}
   ],
   "requirements": ["要件1", "要件2"],
   "non_goals": ["対象外1", "対象外2"],
@@ -192,13 +202,25 @@ overviewには**必ず機能リスト（features）を含める**。
 
 overview承認後、featuresの各機能に対して詳細specを**1つずつ**作成する。
 
-#### 4a. data/tables spec（テーブル定義）
+#### 4a. data/tables spec（テーブル定義 + シーダー）
 
 ```
 AskUserQuestion:
 「{テーブル名}テーブルを以下の構成で作成します:
-- カラム: id, title, completed, timestamps
-- インデックス: なし
+
+【カラム】
+| カラム | 型 | 説明 |
+|--------|-----|------|
+| id | bigint | 主キー |
+| title | string(255) | タスク名 |
+| completed | boolean | 完了フラグ |
+| timestamps | - | 作成・更新日時 |
+
+【開発用シーダー】
+- 買い物に行く (未完了)
+- レポートを書く (完了)
+- ジムに行く (未完了)
+
 よろしいですか？」
 ```
 
@@ -229,8 +251,7 @@ AskUserQuestion:
 ### ステップ5: 全spec作成完了
 
 全ての詳細spec作成後、次のステップを案内:
-- `/db` でDB実装
-- `/coding` でUI実装
+- `/coding` で実装開始（DB + シーダー + UI 全て）
 
 ---
 
@@ -241,7 +262,7 @@ Categories: core, data, ui, action
 
 Types:
   - core: overview, const
-  - data: tables, seeders
+  - data: tables (シーダー定義を含む)
   - ui: pages, partials, layouts
   - action: sync, async, scheduled
 ```
@@ -250,16 +271,30 @@ Types:
 
 | Category | Type | 用途 |
 |----------|------|------|
-| core | overview | プロジェクト概要・機能一覧 |
+| core | overview | プロジェクト概要・機能一覧・テーブル概要 |
 | core | const | 定数定義・設定値 |
-| data | tables | DBテーブル定義 |
-| data | seeders | 初期データ・テストデータ |
+| data | tables | DBテーブル定義 + シーダー定義 |
 | ui | pages | フルページLivewireコンポーネント |
 | ui | partials | 再利用可能なUIパーツ |
 | ui | layouts | レイアウトコンポーネント |
 | action | sync | 同期処理（Actionクラス） |
 | action | async | 非同期処理（Jobクラス） |
 | action | scheduled | スケジュール実行（Command） |
+
+### 依存関係（depends_on）
+
+各specは `depends_on` で他のspecへの依存を明示できる。
+
+```json
+// ui/pages/todo-index
+{
+  "route": "/",
+  "depends_on": ["data/tables/tasks"],
+  ...
+}
+```
+
+Agentは実装時に `depends_on` のspecを参照して詳細要件を取得する。
 
 ---
 
@@ -281,18 +316,33 @@ Types:
 
 ### data/tables テンプレート
 
+**シーダー定義を必ず含める**（開発・テスト用のダミーデータ）
+
 ```bash
 ./scripts/blueprint-db-cli.sh add data tables tasks "tasksテーブル" '{
   "columns": [
     {"name": "id", "type": "bigint", "primary": true},
-    {"name": "title", "type": "string", "nullable": false},
+    {"name": "title", "type": "string", "nullable": false, "max": 255},
     {"name": "completed", "type": "boolean", "default": false},
     {"name": "timestamps", "type": "timestamps"}
   ],
   "indexes": [],
-  "relations": []
+  "relations": [],
+  "seeders": {
+    "dev": [
+      {"title": "買い物に行く", "completed": false},
+      {"title": "レポートを書く", "completed": true},
+      {"title": "ジムに行く", "completed": false}
+    ]
+  }
 }'
 ```
+
+#### シーダー定義ルール
+
+- `dev`: 開発・手動テスト用（3-5件）
+- 各テーブルに必ず `seeders.dev` を含める
+- 実装時にSeederファイルを自動生成可能にする
 
 ### ui/pages テンプレート
 

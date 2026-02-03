@@ -1,6 +1,6 @@
 # livewire-agent
 
-UI実装の専門家（Livewire Component + Blade 一体開発）
+UI実装の専門家（Livewire Component + Blade 一体開発 + 依存DB実装）
 
 ## 最初に実行すること
 
@@ -8,6 +8,56 @@ UI実装の専門家（Livewire Component + Blade 一体開発）
 ./scripts/blueprint-db-cli.sh get core overview main
 ```
 → プロジェクト概要を把握
+
+---
+
+## 実装フロー（CRITICAL）
+
+<implementation-flow>
+  <principle>
+    ui/pages spec の depends_on を確認し、依存テーブルを先に実装する。
+    テーブル実装時はspec内の seeders 定義からSeederを生成する。
+  </principle>
+
+  <step name="1-check-deps">
+    <action>ui/pages spec を取得して depends_on を確認</action>
+    <command>./scripts/blueprint-db-cli.sh get ui pages {slug}</command>
+  </step>
+
+  <step name="2-implement-deps">
+    <condition>depends_on に data/tables がある場合</condition>
+    <for-each dep="data/tables/*">
+      <action>テーブル spec を取得</action>
+      <command>./scripts/blueprint-db-cli.sh get data tables {table-slug}</command>
+      <outputs>
+        <output>Migration: database/migrations/xxxx_create_{table}_table.php</output>
+        <output>Model: app/Models/{Model}.php</output>
+        <output>Seeder: database/seeders/{Model}Seeder.php</output>
+      </outputs>
+      <seeder-source>spec.data.seeders.dev</seeder-source>
+    </for-each>
+  </step>
+
+  <step name="3-run-migrations">
+    <action>マイグレーション実行とシーディング</action>
+    <command>php artisan migrate:fresh --seed</command>
+    <verify>php artisan tinker --execute="App\Models\{Model}::count()"</verify>
+  </step>
+
+  <step name="4-implement-ui">
+    <action>Livewire コンポーネント実装</action>
+    <outputs>
+      <output>Component: app/Livewire/Pages/{Feature}/{Name}.php</output>
+      <output>View: resources/views/livewire/pages/{feature}/{name}.blade.php</output>
+      <output>Route: routes/web.php</output>
+    </outputs>
+  </step>
+
+  <step name="5-test">
+    <action>Feature テスト作成・実行</action>
+    <command>php artisan test tests/Feature/Livewire/{Component}Test.php</command>
+  </step>
+</implementation-flow>
 
 ## スタック
 
@@ -22,10 +72,69 @@ PHP 8.3+
 
 ## 出力物
 
-1. Livewire Component (`app/Livewire/`)
-2. Blade テンプレート (`resources/views/livewire/`)
-3. ルート追加（必要に応じて `routes/web.php`）
-4. Level 1 Feature テスト (`tests/Feature/Livewire/`)
+1. **依存テーブル**（depends_on にある場合）
+   - Migration (`database/migrations/`)
+   - Model (`app/Models/`)
+   - Seeder (`database/seeders/`) ← spec の seeders.dev から生成
+2. Livewire Component (`app/Livewire/`)
+3. Blade テンプレート (`resources/views/livewire/`)
+4. ルート追加（必要に応じて `routes/web.php`）
+5. Level 1 Feature テスト (`tests/Feature/Livewire/`)
+
+---
+
+## Seeder生成（spec から自動生成）
+
+spec の `seeders.dev` からSeederを生成する。
+
+### spec例
+```json
+{
+  "columns": [...],
+  "seeders": {
+    "dev": [
+      {"title": "買い物に行く", "completed": false},
+      {"title": "レポートを書く", "completed": true}
+    ]
+  }
+}
+```
+
+### 生成されるSeeder
+
+```php
+// database/seeders/TaskSeeder.php
+namespace Database\Seeders;
+
+use App\Models\Task;
+use Illuminate\Database\Seeder;
+
+class TaskSeeder extends Seeder
+{
+    public function run(): void
+    {
+        $tasks = [
+            ['title' => '買い物に行く', 'completed' => false],
+            ['title' => 'レポートを書く', 'completed' => true],
+        ];
+
+        foreach ($tasks as $task) {
+            Task::create($task);
+        }
+    }
+}
+```
+
+### DatabaseSeeder.php への登録
+
+```php
+public function run(): void
+{
+    $this->call([
+        TaskSeeder::class,
+    ]);
+}
+```
 
 ---
 

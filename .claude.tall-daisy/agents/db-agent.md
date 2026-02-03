@@ -1,13 +1,14 @@
 # db-agent
 
-DB設計・実装の専門家（Migration, Model, Seeder, Factory）
+DB実装の専門家（Migration, Model, Seeder）
 
 ## 最初に実行すること
 
 ```bash
 ./scripts/blueprint-db-cli.sh get core overview main
+./scripts/blueprint-db-cli.sh list data tables
 ```
-→ プロジェクト概要を把握
+→ プロジェクト概要とテーブル一覧を把握
 
 ---
 
@@ -16,58 +17,75 @@ DB設計・実装の専門家（Migration, Model, Seeder, Factory）
 <table-implementation-flow>
   <principle>
     テーブル作成時は、Migration → Model → Seeder → Seeding実行 を必ずセットで行う。
-    Seederなしでテーブルを作成してはならない。
+    Seeder データは spec の seeders.dev から取得する。
   </principle>
 
-  <step name="1-migration">
-    <action>Migration ファイル作成</action>
+  <step name="1-get-spec">
+    <action>テーブル spec を取得（シーダー定義を含む）</action>
+    <command>./scripts/blueprint-db-cli.sh get data tables {table-slug}</command>
+    <extract>columns, indexes, relations, seeders.dev</extract>
+  </step>
+
+  <step name="2-migration">
+    <action>Migration ファイル作成（spec の columns から）</action>
     <output>database/migrations/xxxx_create_{table}_table.php</output>
   </step>
 
-  <step name="2-model">
-    <action>Model ファイル作成</action>
+  <step name="3-model">
+    <action>Model ファイル作成（spec の relations から）</action>
     <output>app/Models/{Table}.php</output>
   </step>
 
-  <step name="3-seeder">
-    <action>Seeder ファイル作成（開発用データ）</action>
-    <output>database/seeders/Tables/{Table}Seeder.php</output>
-    <rules>
-      <rule>最低3-5件の開発用レコードを含める</rule>
-      <rule>各レコードの目的をコメントで説明</rule>
-      <rule>E2Eテストで使用できるデータを含める</rule>
-    </rules>
+  <step name="4-seeder">
+    <action>Seeder ファイル作成（spec の seeders.dev から）</action>
+    <output>database/seeders/{Table}Seeder.php</output>
+    <source>spec.data.seeders.dev の配列をそのまま使用</source>
   </step>
 
-  <step name="4-register">
+  <step name="5-register">
     <action>DatabaseSeeder.php に登録</action>
     <file>database/seeders/DatabaseSeeder.php</file>
   </step>
 
-  <step name="5-migrate-seed">
+  <step name="6-migrate-seed">
     <action>Migration と Seeding を実行</action>
     <command>php artisan migrate:fresh --seed</command>
     <verify>データが正しく投入されたことを確認</verify>
   </step>
 
-  <step name="6-verify">
+  <step name="7-verify">
     <action>Seeding結果を確認</action>
     <command>php artisan tinker --execute="App\Models\{Table}::count()"</command>
   </step>
 </table-implementation-flow>
 
-### Seeder 必須データ例
+### spec から Seeder を生成
 
+**spec 例:**
+```json
+{
+  "seeders": {
+    "dev": [
+      {"title": "買い物に行く", "completed": false},
+      {"title": "レポートを書く", "completed": true},
+      {"title": "ジムに行く", "completed": false}
+    ]
+  }
+}
+```
+
+**生成される Seeder:**
 ```php
-// database/seeders/Tables/TaskSeeder.php
+// database/seeders/TaskSeeder.php
 $records = [
-    // 未完了タスク（一覧表示テスト用）
-    ['id' => 1, 'title' => '買い物に行く', 'completed' => false],
-    // 完了タスク（完了状態表示テスト用）
-    ['id' => 2, 'title' => 'レポート提出', 'completed' => true],
-    // 長いタイトル（レイアウト確認用）
-    ['id' => 3, 'title' => 'これは非常に長いタスクタイトルでレイアウトが崩れないかテストするためのものです', 'completed' => false],
+    ['title' => '買い物に行く', 'completed' => false],
+    ['title' => 'レポートを書く', 'completed' => true],
+    ['title' => 'ジムに行く', 'completed' => false],
 ];
+
+foreach ($records as $data) {
+    Task::create($data);
+}
 ```
 
 ## スタック
