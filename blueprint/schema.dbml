@@ -47,7 +47,7 @@ Table specs {
 Table tasks {
   id integer [pk, increment]
   spec_id integer [ref: > specs.id]
-  instructor_type text [not null, note: 'db, frontend, backend, test']
+  agent_type text [not null, note: 'db-agent, livewire-agent, action-agent, test-agent']
   content text [not null, note: 'Task instruction content']
   status text [default: 'pending', note: 'pending, completed, failed']
   created_at datetime [default: `CURRENT_TIMESTAMP`]

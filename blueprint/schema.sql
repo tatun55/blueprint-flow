@@ -52,11 +52,11 @@ CREATE TABLE IF NOT EXISTS spec_dependencies (
     UNIQUE(spec_id, blocked_by_spec_id)
 );
 
--- Tasks table for storing instruction documents
+-- Tasks table for storing agent instructions
 CREATE TABLE IF NOT EXISTS tasks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     spec_id INTEGER NOT NULL REFERENCES specs(id) ON DELETE CASCADE,
-    instructor_type TEXT NOT NULL CHECK(instructor_type IN ('db', 'frontend', 'backend', 'test')),
+    agent_type TEXT NOT NULL CHECK(agent_type IN ('db-agent', 'livewire-agent', 'action-agent', 'test-agent')),
     content TEXT NOT NULL,
     status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'completed', 'failed')),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP

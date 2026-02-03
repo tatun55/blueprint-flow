@@ -46,7 +46,7 @@ Blueprint CLI Commands:
     unlock <id>                  Release lock
 
   Tasks:
-    task-add <spec_id> <instructor> '<content>'   Add task
+    task-add <spec_id> <agent_type> '<content>'   Add task (agent_type: db-agent, livewire-agent, action-agent, test-agent)
     task-get <id>                Get task content
     task-status <id> <status>    Update task status (pending/completed/failed)
     task-list [spec_id]          List tasks
@@ -221,7 +221,7 @@ case "$1" in
 
     # Task commands
     task-add)
-        sqlite3 "$DB_PATH" "INSERT INTO tasks (spec_id, instructor_type, content, status) VALUES ($2, '$3', '$4', 'pending');"
+        sqlite3 "$DB_PATH" "INSERT INTO tasks (spec_id, agent_type, content, status) VALUES ($2, '$3', '$4', 'pending');"
         echo "{\"success\": true, \"id\": $(sqlite3 "$DB_PATH" "SELECT last_insert_rowid();")}"
         ;;
 
@@ -236,9 +236,9 @@ case "$1" in
 
     task-list)
         if [[ -n "$2" ]]; then
-            sqlite3 -json "$DB_PATH" "SELECT id, spec_id, instructor_type, status, created_at FROM tasks WHERE spec_id = $2 ORDER BY created_at DESC;"
+            sqlite3 -json "$DB_PATH" "SELECT id, spec_id, agent_type, status, created_at FROM tasks WHERE spec_id = $2 ORDER BY created_at DESC;"
         else
-            sqlite3 -json "$DB_PATH" "SELECT id, spec_id, instructor_type, status, created_at FROM tasks ORDER BY created_at DESC;"
+            sqlite3 -json "$DB_PATH" "SELECT id, spec_id, agent_type, status, created_at FROM tasks ORDER BY created_at DESC;"
         fi
         ;;
 

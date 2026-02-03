@@ -2,10 +2,10 @@
 # Blueprint Flow - Project Creator
 # Creates a new Laravel project with full setup including blueprint-flow
 #
-# Usage: ./.blueprint-flow/scripts/create-project.sh <project-name>
-#    OR: Run from anywhere: /path/to/create-project.sh <project-name>
+# Usage: ./.blueprint-flow/scripts/create-project.sh <project-name> [stack]
+#    OR: Run from anywhere: /path/to/create-project.sh <project-name> [stack]
 #
-# Example: ./create-project.sh my-todo-app
+# Example: ./create-project.sh my-todo-app tall-daisy
 
 set -euo pipefail
 
@@ -24,13 +24,13 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 # Configuration
 PROJECT_BASE="/Users/a_t/project"
 VALET_DOMAIN="pizza"
-STACK="tall-daisy"
+STACK="${2:-tall-daisy}"
 BLUEPRINT_REPO="https://github.com/tatun55/blueprint-flow"
 
 # Check arguments
 if [[ -z "${1:-}" ]]; then
-    echo "Usage: $0 <project-name>"
-    echo "Example: $0 my-todo-app"
+    echo "Usage: $0 <project-name> [stack]"
+    echo "Example: $0 my-todo-app tall-daisy"
     exit 1
 fi
 
@@ -45,6 +45,7 @@ fi
 
 log_info "Creating project: $PROJECT_NAME"
 log_info "Path: $PROJECT_PATH"
+log_info "Stack: $STACK"
 echo ""
 
 # ============================================
@@ -186,10 +187,6 @@ log_success "blueprint-flow submodule added"
 ./.blueprint-flow/scripts/init.sh "$STACK"
 log_success "blueprint-flow initialized with $STACK stack"
 
-# Initialize blueprint database
-./scripts/blueprint-db-cli.sh init
-log_success "Blueprint database initialized"
-
 # Commit blueprint-flow setup
 git add -A
 git commit -m "Add blueprint-flow with $STACK stack" --quiet
@@ -207,10 +204,11 @@ echo ""
 echo -e "  Project: ${BLUE}$PROJECT_NAME${NC}"
 echo -e "  Path:    ${BLUE}$PROJECT_PATH${NC}"
 echo -e "  URL:     ${BLUE}http://${PROJECT_NAME}.${VALET_DOMAIN}${NC}"
+echo -e "  Stack:   ${BLUE}$STACK${NC}"
 echo ""
 echo -e "  ${YELLOW}Next steps:${NC}"
 echo -e "  1. cd $PROJECT_PATH"
 echo -e "  2. npm run dev      # Start Vite"
 echo -e "  3. /blueprint       # Create specs"
-echo -e "  4. /hub             # Process specs"
+echo -e "  4. /db, /coding, /test for development"
 echo ""

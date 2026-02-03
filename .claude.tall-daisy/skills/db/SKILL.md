@@ -1,0 +1,37 @@
+# DB Skill
+
+DB設計・変更の指示と db-agent の起動
+
+## 引数なしの場合
+
+1. 現在のDB状態を確認
+```bash
+ls database/migrations/
+./blueprint/db-cli.sh list data tables
+```
+
+2. AskUserQuestion で何をしたいか確認:
+   - 「新しいテーブルを追加」
+   - 「既存テーブルにカラム追加」
+   - 「リレーション変更」
+   - 「Seeder更新」
+
+3. 選択に応じて詳細をヒアリング
+4. db-agent を Task tool で起動
+
+## 引数ありの場合
+
+`$ARGUMENTS` をそのまま db-agent に渡して Task tool で起動
+
+## Agent 起動例
+
+```
+Task tool:
+- subagent_type: "general-purpose"
+- prompt: "db-agentとして実行: {$ARGUMENTS の内容}"
+- description: "DB設計・実装"
+```
+
+## 呼び出す Agent
+
+`db-agent` - `.claude/agents/db-agent.md` の定義を使用
