@@ -80,10 +80,7 @@ This project uses blueprint-flow for development workflow.
 ## Quick Commands
 
 ```bash
-/blueprint     # Manage specs
-/db            # DB design
-/coding        # Implementation
-/test          # Testing
+/blueprint     # Spec management & development orchestration
 ```
 
 ## Project-Specific Rules
@@ -106,5 +103,4 @@ echo ".claude -> .blueprint-flow/.claude.$STACK (symlink)"
 echo ""
 echo "Next steps:"
 echo "  1. Review/update CLAUDE.md with project-specific rules"
-echo "  2. Run /blueprint to create specs"
-echo "  3. Run /db, /coding, /test for development"
+echo "  2. Run /blueprint to start development"
