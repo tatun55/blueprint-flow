@@ -34,6 +34,7 @@ sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"
   <principle>
     UI実装のみを担当。DB（Migration/Model/Seeder）は db-agent が担当。
     **AskUserQuestion は使用しない。必要な情報は全て spec に含まれている。**
+    **テストパスで完了とする。テストが通らなければ完了ではない。**
   </principle>
 
   <step name="1-get-spec">
@@ -42,7 +43,13 @@ sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"
     <extract>route, component, layout_ascii, operations, depends_on</extract>
   </step>
 
-  <step name="2-verify-deps">
+  <step name="2-get-test-spec">
+    <action>対応する test/feature spec を取得</action>
+    <command>sqlite3 -json $DB "SELECT * FROM specs WHERE category='test' AND type='feature' AND slug LIKE '%{slug}%'"</command>
+    <note>テスト設計は /blueprint が定義済み。この spec に基づいてテストを作成する。</note>
+  </step>
+
+  <step name="3-verify-deps">
     <condition>depends_on に data/tables がある場合</condition>
     <action>依存テーブルが実装済みか確認</action>
     <check>ls app/Models/{Model}.php</check>
@@ -51,13 +58,13 @@ sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"
     </if-not-exists>
   </step>
 
-  <step name="3-get-model-info">
+  <step name="4-get-model-info">
     <action>依存テーブルのspec を取得してModel構造を把握</action>
     <command>sqlite3 -json $DB "SELECT * FROM specs WHERE id = {depends_on_id}"</command>
     <extract>columns, relations（UIで使用するデータ構造を理解）</extract>
   </step>
 
-  <step name="4-implement-ui">
+  <step name="5-implement-ui">
     <action>Livewire コンポーネント実装</action>
     <outputs>
       <output>Component: app/Livewire/Pages/{Feature}/{Name}.php</output>
@@ -66,16 +73,35 @@ sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"
     </outputs>
   </step>
 
-  <step name="5-test">
-    <action>Feature テスト作成・実行</action>
-    <command>php artisan test tests/Feature/Livewire/{Component}Test.php</command>
+  <step name="6-create-test">
+    <action>test/feature spec に基づいて Feature テストを作成</action>
+    <output>tests/Feature/Livewire/{Component}Test.php</output>
+    <source>test spec の scenarios からテストケースを生成</source>
   </step>
 
-  <step name="6-report">
+  <step name="7-run-test">
+    <action>テスト実行（パスするまで修正）</action>
+    <command>php artisan test tests/Feature/Livewire/{Component}Test.php</command>
+    <on-failure>実装またはテストを修正して再実行</on-failure>
+  </step>
+
+  <step name="8-report">
     <action>実装結果を報告（親agentへ返す）</action>
-    <content>作成ファイル一覧、テスト結果、route URL</content>
+    <content>作成ファイル一覧、テスト結果（全パス必須）、route URL</content>
   </step>
 </implementation-flow>
+
+---
+
+## 既存機能の修正
+
+既存のコンポーネントを修正する場合:
+
+1. 既存のテストファイルを確認
+2. 実装を修正
+3. 既存テストが通ることを確認（失敗したらテストも修正）
+4. 必要に応じて新しいテストケースを追加
+5. 全テストパスで完了
 
 ---
 

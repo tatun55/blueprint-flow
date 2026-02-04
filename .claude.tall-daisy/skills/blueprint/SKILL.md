@@ -175,9 +175,19 @@ specが0件の場合:
         <action>ui/pages spec を作成</action>
         <method>AskUserQuestion でASCIIアートレイアウトを確認</method>
       </sub-step>
-      <sub-step name="4c-tests">
-        <action>test/e2e spec を作成</action>
+      <sub-step name="4c-feature-tests">
+        <action>test/feature spec を作成（Level 1: 基本操作テスト）</action>
+        <note>ui/pages に対応するFeatureテストの設計</note>
         <method>AskUserQuestion でテストシナリオを確認</method>
+      </sub-step>
+      <sub-step name="4d-unit-tests">
+        <condition>action spec がある場合</condition>
+        <action>test/unit spec を作成（Level 1: 基本ロジックテスト）</action>
+        <note>action に対応するUnitテストの設計</note>
+      </sub-step>
+      <sub-step name="4e-e2e-tests">
+        <action>test/e2e spec を作成（Level 1: 基本シナリオ）</action>
+        <method>AskUserQuestion でE2Eシナリオを確認</method>
       </sub-step>
     </for-each>
   </step>
@@ -305,6 +315,26 @@ INSERT INTO specs (category, type, slug, name, data) VALUES (
   '{"level":1,"depends_on":["ui/pages/todo-index"],"target":{"type":"page","url":"/","component":"App\\Livewire\\Pages\\TodoIndex"},"scenarios":[{"name":"page-load","description":"ページが正しく表示される","assertions":["h1要素が表示される","タスク一覧が表示される"]},{"name":"add-task","description":"タスクを追加できる","steps":["入力欄に「新しいタスク」を入力","追加ボタンをクリック"],"assertions":["新しいタスクが一覧に表示される"]}],"required_data":[]}'
 );
 ```
+
+### test/feature テンプレート（CRITICAL: agentにタスクを渡す前に作成）
+
+```sql
+INSERT INTO specs (category, type, slug, name, data) VALUES (
+  'test', 'feature', 'todo-index', 'Todoページ Featureテスト',
+  '{"level":1,"depends_on":["ui/pages/todo-index"],"target":{"component":"App\\Livewire\\Pages\\TodoIndex"},"scenarios":[{"name":"display","description":"コンポーネントが表示される","assertions":["status 200","タスク一覧が表示"]},{"name":"add-task","description":"タスクを追加できる","assertions":["DBに保存される","一覧に表示される"]},{"name":"toggle-complete","description":"完了状態を切り替えられる","assertions":["completed が反転する"]},{"name":"delete-task","description":"タスクを削除できる","assertions":["DBから削除される"]}]}'
+);
+```
+
+### test/unit テンプレート（action spec がある場合に作成）
+
+```sql
+INSERT INTO specs (category, type, slug, name, data) VALUES (
+  'test', 'unit', 'create-task', 'CreateTask Unitテスト',
+  '{"level":1,"depends_on":["action/sync/create-task"],"target":{"class":"App\\Actions\\CreateTask"},"scenarios":[{"name":"execute","description":"タスクを作成できる","assertions":["Task が作成される","イベントが発火する"]},{"name":"validation","description":"バリデーションが機能する","assertions":["空のtitleでエラー"]}]}'
+);
+```
+
+**重要**: /blueprint は agentにタスクを渡す前に、対応する test/feature または test/unit の spec を作成すること。agentはこの spec を参照してテストコードを作成する。
 
 ---
 

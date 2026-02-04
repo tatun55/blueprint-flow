@@ -32,6 +32,7 @@ sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"
   <principle>
     action spec の depends_on を確認し、依存テーブルのModelを把握してから実装する。
     **AskUserQuestion は使用しない。必要な情報は全て spec に含まれている。**
+    **テストパスで完了とする。テストが通らなければ完了ではない。**
   </principle>
 
   <step name="1-get-spec">
@@ -40,27 +41,52 @@ sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"
     <extract>depends_on, input, output, events</extract>
   </step>
 
-  <step name="2-check-deps">
+  <step name="2-get-test-spec">
+    <action>対応する test/unit spec を取得</action>
+    <command>sqlite3 -json $DB "SELECT * FROM specs WHERE category='test' AND type='unit' AND slug LIKE '%{slug}%'"</command>
+    <note>テスト設計は /blueprint が定義済み。この spec に基づいてテストを作成する。</note>
+  </step>
+
+  <step name="3-check-deps">
     <condition>depends_on に data/tables がある場合</condition>
     <action>依存テーブルのspec を取得してModel構造を把握</action>
     <command>sqlite3 -json $DB "SELECT * FROM specs WHERE id = {depends_on_id}"</command>
   </step>
 
-  <step name="3-implement">
+  <step name="4-implement">
     <action>Action/Job/Command クラスを実装</action>
     <note>依存Modelのcolumns, relationsを参照しながら実装</note>
   </step>
 
-  <step name="4-test">
-    <action>Unit テスト作成・実行</action>
-    <command>php artisan test tests/Unit/Actions/{Action}Test.php</command>
+  <step name="5-create-test">
+    <action>test/unit spec に基づいて Unit テストを作成</action>
+    <output>tests/Unit/Actions/{Action}Test.php</output>
+    <source>test spec の scenarios からテストケースを生成</source>
   </step>
 
-  <step name="5-report">
+  <step name="6-run-test">
+    <action>テスト実行（パスするまで修正）</action>
+    <command>php artisan test tests/Unit/Actions/{Action}Test.php</command>
+    <on-failure>実装またはテストを修正して再実行</on-failure>
+  </step>
+
+  <step name="7-report">
     <action>実装結果を報告（親agentへ返す）</action>
-    <content>作成ファイル一覧、テスト結果</content>
+    <content>作成ファイル一覧、テスト結果（全パス必須）</content>
   </step>
 </implementation-flow>
+
+---
+
+## 既存機能の修正
+
+既存のAction/Job/Commandを修正する場合:
+
+1. 既存のテストファイルを確認
+2. 実装を修正
+3. 既存テストが通ることを確認（失敗したらテストも修正）
+4. 必要に応じて新しいテストケースを追加
+5. 全テストパスで完了
 
 ---
 
