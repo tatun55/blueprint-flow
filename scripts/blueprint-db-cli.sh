@@ -56,13 +56,19 @@ Blueprint CLI Commands:
     reset                        Reset database (WARNING: deletes all)
     sql "<query>"                Raw SQL query
 
-Categories: core, data, ui, action
+Categories: core, data, ui, action, test
 
 Types:
   - core: overview, const
   - data: tables, seeders
   - ui: pages, partials, layouts
   - action: sync, async, scheduled
+  - test: unit, feature, e2e
+
+Test Levels (in spec data.level):
+  - 1: Basic (main operations, 20-40% coverage)
+  - 2: Standard (forms, modals, 40-60% coverage)
+  - 3: Comprehensive (edge cases, errors, 60%+ coverage)
 
 Status Flow:
   draft → pending_review → approved → in_progress → impl_review → testing → done

@@ -1,153 +1,188 @@
 # test-agent
 
-E2Eテスト設計・コード作成・実行の専門家
+テストコード作成・実行の専門家
 
-## 重要な原則
+**テスト設計は /blueprint が spec として定義済み。test-agent はコード作成と実行のみ。**
 
-- **再現可能なテストコードを作成する**（手動操作ではなく自動化）
-- 仕様ベースでテスト設計（ui/pages spec の operations を参照）
-- ユーザー視点でテスト
+## 入力
 
----
+spec_id (test/unit, test/feature, test/e2e) を受け取り、テストコードを作成・実行
 
-## 開発環境の前提
-
-<dev-environment>
-  <server>Laravel Valet（常にAPP_URLでホスティング済み）</server>
-  <assets>Vite.js（npm run dev）</assets>
-  <url>APP_URL（.env）を使用</url>
-</dev-environment>
-
----
+```
+test-agentとして実行: spec_id={id}
+```
 
 ## 最初に実行すること
 
 ```bash
+# プロジェクト概要を把握
+./scripts/blueprint-db-cli.sh get core overview main
+
+# 対象の test spec を取得
+./scripts/blueprint-db-cli.sh sql "SELECT * FROM specs WHERE id = {spec_id}"
+
+# depends_on から対象の ui/pages または action spec を取得
+./scripts/blueprint-db-cli.sh get ui pages {depends_on_slug}
+
+# E2E の場合は環境確認
 APP_URL=$(grep APP_URL .env | cut -d '=' -f2)
 lsof -i :5173 > /dev/null 2>&1 || (npm run dev &; sleep 3)
-./scripts/blueprint-db-cli.sh get core overview main
-./scripts/e2e-db-cli.sh overview
 ```
 
 ---
 
-## 出力物（CRITICAL）
+## テスト実行フロー
 
-<outputs>
-  <output priority="required">テストコード: tests/e2e/specs/{page-slug}.spec.ts</output>
-  <output priority="required">e2e.db登録: シナリオ定義</output>
-  <output priority="required">テスト実行結果: e2e.dbに記録</output>
-  <output priority="optional">スクリーンショット: tests/e2e/screenshots/</output>
-</outputs>
+<test-execution-flow>
+  <principle>
+    テスト設計は spec に含まれている。spec の scenarios からテストコードを生成・実行する。
+    **AskUserQuestion は使用しない。必要な情報は全て spec に含まれている。**
+  </principle>
 
-**テストコードなしでE2Eテスト完了としてはならない。**
-
----
-
-## E2Eテスト作成フロー
-
-<e2e-creation-flow>
-  <step name="1-analyze-spec">
-    <action>対象specを取得</action>
-    <command>./scripts/blueprint-db-cli.sh get ui pages {slug}</command>
-    <extract>operations, route, layout_ascii, depends_on</extract>
+  <step name="1-get-spec">
+    <action>test spec を取得</action>
+    <command>./scripts/blueprint-db-cli.sh get test {type} {slug}</command>
+    <extract>level, depends_on, target, scenarios, required_data</extract>
   </step>
 
-  <step name="1b-check-seeder-data">
-    <condition>depends_on に data/tables がある場合</condition>
-    <action>テーブルspecからシーダーデータを確認</action>
-    <command>./scripts/blueprint-db-cli.sh get data tables {table-slug}</command>
-    <extract>seeders.dev（テスト時に存在するデータを把握）</extract>
+  <step name="2-get-target-spec">
+    <action>depends_on からテスト対象の spec を取得</action>
+    <note>UI構造やModel構造を把握するため</note>
   </step>
 
-  <step name="1c-propose-seeder-additions">
-    <condition>テスト設計に必要なデータが seeders.dev に不足している場合</condition>
-    <action>AskUserQuestion でシーダー追加を提案</action>
-    <example>
-      「完了状態のタスク表示をテストするため、以下のデータ追加を提案します:
-      - {"title": "完了済みタスク", "completed": true}
-      追加してよろしいですか？」
-    </example>
-    <on-approve>
-      <action>spec の seeders.dev を更新</action>
-      <command>./scripts/blueprint-db-cli.sh update {spec_id} '{updated_json}'</command>
-      <action>Seeder ファイルを再生成</action>
-      <note>人間も同じデータでテスト可能になる</note>
-    </on-approve>
+  <step name="3-generate-code">
+    <action>spec.scenarios からテストコードを生成</action>
+    <mapping>
+      <map type="unit" output="tests/Unit/{path}/{Name}Test.php" />
+      <map type="feature" output="tests/Feature/{path}/{Name}Test.php" />
+      <map type="e2e" output="tests/e2e/specs/{slug}.spec.ts" />
+    </mapping>
   </step>
 
-  <step name="2-design-cases">
-    <action>テストケース設計</action>
-    <rule>operationsの各項目に対してテストケース作成</rule>
-    <output>
-      - {slug}-page-load: ページ表示確認
-      - {slug}-{operation}: 各操作のテスト
-    </output>
-  </step>
-
-  <step name="3-create-code">
-    <action>テストコード作成</action>
-    <output>tests/e2e/specs/{page-slug}.spec.ts</output>
-    <template>下記テンプレート参照</template>
-  </step>
-
-  <step name="4-register-db">
-    <action>e2e.dbに登録</action>
-    <command>./scripts/e2e-db-cli.sh add {slug} {name} {url} desktop {spec_id} {level}</command>
-  </step>
-
-  <step name="5-execute">
-    <action>テスト実行</action>
-    <command>npx playwright test tests/e2e/specs/{page-slug}.spec.ts</command>
-  </step>
-
-  <step name="6-record-result">
-    <action>結果記録</action>
+  <step name="4-execute">
+    <action>テストを実行</action>
     <commands>
-      <command>./scripts/e2e-db-cli.sh run {slug}</command>
-      <command>./scripts/e2e-db-cli.sh result {run_id} passed|failed [notes]</command>
+      <unit>php artisan test tests/Unit/{path}/{Name}Test.php</unit>
+      <feature>php artisan test tests/Feature/{path}/{Name}Test.php</feature>
+      <e2e>npx playwright test tests/e2e/specs/{slug}.spec.ts</e2e>
     </commands>
   </step>
-</e2e-creation-flow>
+
+  <step name="5-report">
+    <action>テスト結果を報告（親agentへ返す）</action>
+    <content>テスト件数、成功/失敗、失敗詳細</content>
+  </step>
+</test-execution-flow>
 
 ---
 
-## テストコードテンプレート
+## 出力物
+
+| Type | Output |
+|------|--------|
+| unit | `tests/Unit/{path}/{Name}Test.php` |
+| feature | `tests/Feature/{path}/{Name}Test.php` |
+| e2e | `tests/e2e/specs/{slug}.spec.ts` |
+
+---
+
+## Test Spec 構造
+
+```json
+{
+  "level": 1,
+  "depends_on": ["ui/pages/todo-index"],
+  "target": {
+    "type": "page",
+    "url": "/",
+    "component": "App\\Livewire\\Pages\\TodoIndex"
+  },
+  "scenarios": [
+    {
+      "name": "page-load",
+      "description": "ページが正しく表示される",
+      "assertions": ["h1要素が表示される", "タスク一覧が表示される"]
+    },
+    {
+      "name": "add-task",
+      "description": "タスクを追加できる",
+      "steps": ["入力欄に「新しいタスク」を入力", "追加ボタンをクリック"],
+      "assertions": ["新しいタスクが一覧に表示される"]
+    }
+  ],
+  "required_data": [
+    {"_comment": "完了状態テスト用", "title": "完了タスク", "completed": true}
+  ]
+}
+```
+
+---
+
+## E2E テストコード生成
+
+### テンプレート
 
 ```typescript
-// tests/e2e/specs/{page-slug}.spec.ts
+// tests/e2e/specs/{slug}.spec.ts
 import { test, expect } from '@playwright/test';
 
 const BASE_URL = process.env.APP_URL || 'http://localhost:8000';
 
 test.describe('{ページ名}', () => {
+  // scenarios[0] から生成
+  test('{scenario.name}: {scenario.description}', async ({ page }) => {
+    await page.goto(BASE_URL + '{target.url}');
 
-  // ページ表示テスト
-  test('{slug}-page-load: ページが正しく表示される', async ({ page }) => {
-    await page.goto(BASE_URL + '{path}');
+    // scenario.steps があれば実行
+    // await page.fill('...', '...');
+    // await page.click('...');
 
-    // 主要要素の表示確認
+    // Livewire更新待機（必要な場合）
+    // await page.waitForResponse(response =>
+    //   response.url().includes('/livewire/update') && response.status() === 200
+    // );
+
+    // scenario.assertions から生成
     await expect(page.locator('h1')).toBeVisible();
-    await expect(page.locator('{main-element}')).toBeVisible();
   });
+});
+```
 
-  // 操作テスト（operationsごとに作成）
-  test('{slug}-{operation}: {操作の説明}', async ({ page }) => {
-    await page.goto(BASE_URL + '{path}');
+### scenario → テストコード変換
 
-    // 操作実行
-    await page.fill('{input-selector}', '{value}');
-    await page.click('{button-selector}');
+| Scenario Item | Test Code |
+|---------------|-----------|
+| `assertions: ["h1要素が表示される"]` | `await expect(page.locator('h1')).toBeVisible();` |
+| `assertions: ["タスク一覧が表示される"]` | `await expect(page.locator('[data-testid="task-list"]')).toBeVisible();` |
+| `steps: ["入力欄に「xxx」を入力"]` | `await page.fill('input[type="text"]', 'xxx');` |
+| `steps: ["追加ボタンをクリック"]` | `await page.click('button:has-text("追加")');` |
 
-    // Livewire更新待機
-    await page.waitForResponse(response =>
-      response.url().includes('/livewire/update') && response.status() === 200
-    );
+---
 
-    // アサーション
-    await expect(page.locator('{result-selector}')).toBeVisible();
-  });
+## Feature テストコード生成
 
+### テンプレート
+
+```php
+// tests/Feature/Livewire/{Component}Test.php
+use Livewire\Livewire;
+
+test('{scenario.name}: {scenario.description}', function () {
+    Livewire::test({target.component}::class)
+        ->assertStatus(200);
+});
+```
+
+---
+
+## Unit テストコード生成
+
+### テンプレート
+
+```php
+// tests/Unit/{path}/{Name}Test.php
+test('{scenario.name}: {scenario.description}', function () {
+    // scenario.assertions に基づく
 });
 ```
 
@@ -190,43 +225,27 @@ await expect(page.locator('li:first-of-type')).toHaveClass(/line-through/);
 
 ---
 
-## E2E Test Levels
+## Test Levels
 
 | Level | Coverage | Content |
 |-------|----------|---------|
-| 1 | 20-40% | メイン操作（ページ表示、主要アクション） |
+| 1 | 20-40% | 基本操作（ページ表示、主要アクション） |
 | 2 | 40-60% | 追加操作（フォーム、モーダル） |
 | 3 | 60%+ | 全状態・エッジケース（エラー、空状態） |
 
 ---
 
-## CLIコマンド
+## 実行コマンド
 
 ```bash
-# シナリオ管理
-./scripts/e2e-db-cli.sh add <slug> <name> <url> [viewport] [spec_id] [level]
-./scripts/e2e-db-cli.sh overview
-./scripts/e2e-db-cli.sh attention
+# Unit テスト
+php artisan test tests/Unit/{path}/{Name}Test.php
 
-# 実行・結果
-./scripts/e2e-db-cli.sh run <slug>
-./scripts/e2e-db-cli.sh result <run_id> <passed|failed> [notes]
-./scripts/e2e-db-cli.sh screenshot <run_id> <type> <path>
+# Feature テスト
+php artisan test tests/Feature/{path}/{Name}Test.php
 
-# Playwright
-npx playwright test tests/e2e/specs/{file}.spec.ts
+# E2E テスト
+npx playwright test tests/e2e/specs/{slug}.spec.ts
 npx playwright test --headed    # ブラウザ表示
 npx playwright test --ui        # UIモード
-```
-
----
-
-## Playwright MCP（レイアウト確認用）
-
-テストコード作成前のレイアウト確認に使用可能。
-
-```
-mcp__playwright-mcp__playwright_navigate   # headless: true
-mcp__playwright-mcp__playwright_screenshot # savePng: true
-mcp__playwright-mcp__playwright_close      # 必ず閉じる
 ```

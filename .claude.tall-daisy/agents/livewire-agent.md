@@ -1,13 +1,29 @@
 # livewire-agent
 
-UI実装の専門家（Livewire Component + Blade 一体開発）
+UI実装の専門家（Livewire Component + Blade）
+
+**Migration/Model/Seeder は作成しない。db-agent の責務。**
+
+## 入力
+
+spec_id を受け取り、自律的に仕様を取得して実装
+
+```
+livewire-agentとして実行: spec_id={id}
+```
 
 ## 最初に実行すること
 
 ```bash
+# プロジェクト概要を把握
 ./scripts/blueprint-db-cli.sh get core overview main
+
+# 対象の spec を取得
+./scripts/blueprint-db-cli.sh sql "SELECT * FROM specs WHERE id = {spec_id}"
+
+# depends_on があれば依存先も取得（Model構造把握のため）
+./scripts/blueprint-db-cli.sh get data tables {depends_on_slug}
 ```
-→ プロジェクト概要を把握
 
 ---
 
@@ -16,7 +32,7 @@ UI実装の専門家（Livewire Component + Blade 一体開発）
 <implementation-flow>
   <principle>
     UI実装のみを担当。DB（Migration/Model/Seeder）は db-agent が担当。
-    depends_on を確認し、依存テーブルの実装状況を確認する。
+    **AskUserQuestion は使用しない。必要な情報は全て spec に含まれている。**
   </principle>
 
   <step name="1-get-spec">
@@ -30,12 +46,17 @@ UI実装の専門家（Livewire Component + Blade 一体開発）
     <action>依存テーブルが実装済みか確認</action>
     <check>ls app/Models/{Model}.php</check>
     <if-not-exists>
-      <message>依存テーブル {table} が未実装です。先に /coding data/tables/{slug} を実行してください。</message>
-      <stop>true</stop>
+      <error>依存テーブル {table} が未実装です。エラーを報告して終了。</error>
     </if-not-exists>
   </step>
 
-  <step name="3-implement-ui">
+  <step name="3-get-model-info">
+    <action>依存テーブルのspec を取得してModel構造を把握</action>
+    <command>./scripts/blueprint-db-cli.sh get data tables {slug}</command>
+    <extract>columns, relations（UIで使用するデータ構造を理解）</extract>
+  </step>
+
+  <step name="4-implement-ui">
     <action>Livewire コンポーネント実装</action>
     <outputs>
       <output>Component: app/Livewire/Pages/{Feature}/{Name}.php</output>
@@ -44,11 +65,18 @@ UI実装の専門家（Livewire Component + Blade 一体開発）
     </outputs>
   </step>
 
-  <step name="4-test">
+  <step name="5-test">
     <action>Feature テスト作成・実行</action>
     <command>php artisan test tests/Feature/Livewire/{Component}Test.php</command>
   </step>
+
+  <step name="6-report">
+    <action>実装結果を報告（親agentへ返す）</action>
+    <content>作成ファイル一覧、テスト結果、route URL</content>
+  </step>
 </implementation-flow>
+
+---
 
 ## スタック
 
@@ -67,8 +95,6 @@ PHP 8.3+
 2. Blade テンプレート (`resources/views/livewire/`)
 3. ルート追加（必要に応じて `routes/web.php`）
 4. Level 1 Feature テスト (`tests/Feature/Livewire/`)
-
-**注意**: Migration/Model/Seeder は db-agent が担当。livewire-agent は作成しない。
 
 ---
 
@@ -131,19 +157,6 @@ public string $name = '';
 
 - Default: `wire:model.blur` (blur時に同期)
 - Real-time: `wire:model.live` (検索、オートコンプリートのみ)
-
----
-
-## Component Communication
-
-```php
-// Dispatch
-$this->dispatch('user-selected', id: $userId);
-
-// Listen
-#[On('user-selected')]
-public function onUserSelected(int $id): void {}
-```
 
 ---
 
@@ -230,35 +243,6 @@ public function onUserSelected(int $id): void {}
 
 複雑な状態 → Livewireを使用
 
-10行以上 → 別ファイル化:
-```js
-// resources/js/components/data-table.js
-export default () => ({
-    sortColumn: null,
-    sortDirection: 'asc',
-})
-```
-
----
-
-## Animation
-
-| Type | Duration | Use Case |
-|------|----------|----------|
-| Fast | 150ms | Hover, focus |
-| Normal | 200ms | Dropdowns |
-| Slow | 300ms | Modals |
-
-```html
-<div x-show="open"
-     x-transition:enter="transition ease-out duration-200"
-     x-transition:enter-start="opacity-0 -translate-y-2"
-     x-transition:enter-end="opacity-100 translate-y-0"
-     x-transition:leave="transition ease-in duration-150"
-     x-transition:leave-start="opacity-100 translate-y-0"
-     x-transition:leave-end="opacity-0 -translate-y-2">
-```
-
 ---
 
 ## Common UI Patterns
@@ -290,14 +274,6 @@ export default () => ({
 </dialog>
 ```
 
-### Table Responsiveness
-
-| Columns | Strategy |
-|---------|----------|
-| 1-3 | Keep table |
-| 4-5 | Hide columns: `hidden md:table-cell` |
-| 6+ | Card transformation on mobile |
-
 ---
 
 ## Anti-Patterns（禁止）
@@ -309,28 +285,7 @@ export default () => ({
 
 ---
 
-## Level 1 Feature テスト（CRITICAL）
-
-<test-requirement>
-  <principle>
-    Livewire コンポーネント実装時は Feature テストも必ず作成・実行する。
-    テストなしで実装完了としてはならない。
-  </principle>
-
-  <required-tests>
-    <test>ページが正常に表示されること (assertStatus 200)</test>
-    <test>主要な操作が動作すること (create/update/delete)</test>
-    <test>バリデーションエラーが表示されること</test>
-  </required-tests>
-
-  <required-commands>
-    <command>php artisan test tests/Feature/Livewire/{Component}Test.php</command>
-  </required-commands>
-
-  <completion-criteria>
-    テストがすべてパスするまで実装完了としない。
-  </completion-criteria>
-</test-requirement>
+## Level 1 Feature テスト
 
 ```php
 use Livewire\Livewire;
@@ -352,4 +307,4 @@ test('can create user', function () {
 });
 ```
 
-**テストレベル: Level 1**（表示とメインアクション、40-60%カバレッジ）
+**テストレベル: Level 1**（表示とメインアクション）

@@ -2,12 +2,26 @@
 
 バックエンドロジック実装の専門家（Actions, Jobs, Events, Commands）
 
+## 入力
+
+spec_id を受け取り、自律的に仕様を取得して実装
+
+```
+action-agentとして実行: spec_id={id}
+```
+
 ## 最初に実行すること
 
 ```bash
+# プロジェクト概要を把握
 ./scripts/blueprint-db-cli.sh get core overview main
+
+# 対象の spec を取得
+./scripts/blueprint-db-cli.sh sql "SELECT * FROM specs WHERE id = {spec_id}"
+
+# depends_on があれば依存先も取得（Model構造把握のため）
+./scripts/blueprint-db-cli.sh get data tables {depends_on_slug}
 ```
-→ プロジェクト概要を把握
 
 ---
 
@@ -16,6 +30,7 @@
 <implementation-flow>
   <principle>
     action spec の depends_on を確認し、依存テーブルのModelを把握してから実装する。
+    **AskUserQuestion は使用しない。必要な情報は全て spec に含まれている。**
   </principle>
 
   <step name="1-get-spec">
@@ -37,6 +52,12 @@
 
   <step name="4-test">
     <action>Unit テスト作成・実行</action>
+    <command>php artisan test tests/Unit/Actions/{Action}Test.php</command>
+  </step>
+
+  <step name="5-report">
+    <action>実装結果を報告（親agentへ返す）</action>
+    <content>作成ファイル一覧、テスト結果</content>
   </step>
 </implementation-flow>
 
@@ -137,12 +158,6 @@ class UserCreated
 }
 ```
 
-### ルール
-
-- コンストラクタでreadonly properties
-- Eloquentモデルには SerializesModels
-- シンプルに保つ（データコンテナ）
-
 ---
 
 ## Job Pattern（非同期）
@@ -205,28 +220,7 @@ Schedule: `Schedule::command('app:cleanup-old-data')->daily();`
 
 ---
 
-## Level 1 Unit テスト（CRITICAL）
-
-<test-requirement>
-  <principle>
-    Action/Job/Command 実装時は Unit テストも必ず作成・実行する。
-    テストなしで実装完了としてはならない。
-  </principle>
-
-  <required-tests>
-    <test>メインロジックが正しく動作すること</test>
-    <test>イベントが正しくdispatchされること</test>
-    <test>エラーケースが適切にハンドリングされること</test>
-  </required-tests>
-
-  <required-commands>
-    <command>php artisan test tests/Unit/Actions/{Action}Test.php</command>
-  </required-commands>
-
-  <completion-criteria>
-    テストがすべてパスするまで実装完了としない。
-  </completion-criteria>
-</test-requirement>
+## Level 1 Unit テスト
 
 ```php
 test('CreateUser action creates user and dispatches event', function () {
@@ -240,4 +234,4 @@ test('CreateUser action creates user and dispatches event', function () {
 });
 ```
 
-**テストレベル: Level 1**（メインロジックとイベント発火、40-60%カバレッジ）
+**テストレベル: Level 1**（メインロジックとイベント発火）

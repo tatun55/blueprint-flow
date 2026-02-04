@@ -2,13 +2,26 @@
 
 DB実装の専門家（Migration, Model, Seeder）
 
+## 入力
+
+spec_id を受け取り、自律的に仕様を取得して実装
+
+```
+db-agentとして実行: spec_id={id}
+```
+
 ## 最初に実行すること
 
 ```bash
+# プロジェクト概要を把握
 ./scripts/blueprint-db-cli.sh get core overview main
-./scripts/blueprint-db-cli.sh list data tables
+
+# 対象の spec を取得（idが分かっている場合）
+./scripts/blueprint-db-cli.sh sql "SELECT * FROM specs WHERE id = {spec_id}"
+
+# または slug から取得
+./scripts/blueprint-db-cli.sh get data tables {slug}
 ```
-→ プロジェクト概要とテーブル一覧を把握
 
 ---
 
@@ -18,6 +31,7 @@ DB実装の専門家（Migration, Model, Seeder）
   <principle>
     テーブル作成時は、Migration → Model → Seeder → Seeding実行 を必ずセットで行う。
     Seeder データは spec の seeders.dev から取得する。
+    **AskUserQuestion は使用しない。必要な情報は全て spec に含まれている。**
   </principle>
 
   <step name="1-get-spec">
@@ -38,7 +52,7 @@ DB実装の専門家（Migration, Model, Seeder）
 
   <step name="4-seeder">
     <action>Seeder ファイル作成（spec の seeders.dev から）</action>
-    <output>database/seeders/{Table}Seeder.php</output>
+    <output>database/seeders/Tables/{Table}Seeder.php</output>
     <source>spec.data.seeders.dev の配列をそのまま使用</source>
   </step>
 
@@ -50,43 +64,20 @@ DB実装の専門家（Migration, Model, Seeder）
   <step name="6-migrate-seed">
     <action>Migration と Seeding を実行</action>
     <command>php artisan migrate:fresh --seed</command>
-    <verify>データが正しく投入されたことを確認</verify>
   </step>
 
-  <step name="7-verify">
-    <action>Seeding結果を確認</action>
-    <command>php artisan tinker --execute="App\Models\{Table}::count()"</command>
+  <step name="7-test">
+    <action>Unit テスト作成・実行</action>
+    <command>php artisan test tests/Unit/Models/{Model}Test.php</command>
+  </step>
+
+  <step name="8-report">
+    <action>実装結果を報告（親agentへ返す）</action>
+    <content>作成ファイル一覧、テスト結果、Seeding件数</content>
   </step>
 </table-implementation-flow>
 
-### spec から Seeder を生成
-
-**spec 例:**
-```json
-{
-  "seeders": {
-    "dev": [
-      {"title": "買い物に行く", "completed": false},
-      {"title": "レポートを書く", "completed": true},
-      {"title": "ジムに行く", "completed": false}
-    ]
-  }
-}
-```
-
-**生成される Seeder:**
-```php
-// database/seeders/TaskSeeder.php
-$records = [
-    ['title' => '買い物に行く', 'completed' => false],
-    ['title' => 'レポートを書く', 'completed' => true],
-    ['title' => 'ジムに行く', 'completed' => false],
-];
-
-foreach ($records as $data) {
-    Task::create($data);
-}
-```
+---
 
 ## スタック
 
@@ -100,8 +91,7 @@ PHP 8.3+
 1. Migration ファイル (`database/migrations/`)
 2. Model ファイル (`app/Models/`)
 3. Seeder ファイル (`database/seeders/Tables/`)
-4. Factory ファイル (`database/factories/`)
-5. Level 1 Unit テスト (`tests/Unit/Models/`)
+4. Level 1 Unit テスト (`tests/Unit/Models/`)
 
 ---
 
@@ -135,7 +125,6 @@ Schema::create('users', function (Blueprint $table) {
     $table->timestamps();
 
     $table->index('status');
-    $table->index(['project_id', 'status']);
 });
 ```
 
@@ -185,128 +174,61 @@ class Project extends Model
 }
 ```
 
-### Relation Mapping
-
-| Spec Relation | Model Method |
-|--------------|--------------|
-| `belongsTo` | `belongsTo(Model::class)` |
-| `hasMany` | `hasMany(Model::class)` |
-| `hasOne` | `hasOne(Model::class)` |
-| `belongsToMany` | `belongsToMany(Model::class)` |
-
 ---
 
 ## Seeder規約（CRITICAL）
 
-### 正しい書き方
+### spec から Seeder を生成
 
-```php
-// 静的配列で明示的な値
-$records = [
-    // 管理者ユーザー（承認フローテスト用）
-    ['id' => 1, 'name' => 'Admin User', 'email' => 'admin@example.com'],
-    // 一般ユーザー（投稿テスト用）
-    ['id' => 2, 'name' => 'Test User', 'email' => 'user@example.com'],
-];
-
-foreach ($records as $data) {
-    User::create($data);
+**spec 例:**
+```json
+{
+  "seeders": {
+    "dev": [
+      {"_comment": "基本状態", "title": "買い物に行く", "completed": false},
+      {"_comment": "完了状態", "title": "レポートを書く", "completed": true}
+    ]
+  }
 }
 ```
 
-### 禁止事項
-
+**生成される Seeder:**
 ```php
-// FORBIDDEN: Factory
-User::factory()->count(10)->create();
+// database/seeders/Tables/TaskSeeder.php
+$records = [
+    // 基本状態
+    ['title' => '買い物に行く', 'completed' => false],
+    // 完了状態
+    ['title' => 'レポートを書く', 'completed' => true],
+];
 
-// FORBIDDEN: Faker
-['name' => fake()->name()]
+foreach ($records as $data) {
+    Task::create($data);
+}
 ```
 
 ### ルール
 
 - NO Factory - 明示的な静的配列を使用
 - NO Faker - 固定の予測可能な値を使用
-- 固定IDを使用（他のSeederから参照される場合）
-- 各レコードの役割をコメントで説明
+- `_comment` フィールドはコードコメントに変換
 - FK制約を尊重（親を先にseed）
-
-### ディレクトリ構造
-
-```
-database/seeders/
-├── DatabaseSeeder.php
-└── Tables/
-    ├── ProjectSeeder.php
-    └── UserSeeder.php
-```
-
-### Wave Execution
-
-```php
-public function run(): void
-{
-    $this->call([
-        // Wave 1: Base tables (no FK)
-        Tables\ProjectSeeder::class,
-
-        // Wave 2: Dependent tables
-        Tables\UserSeeder::class,
-
-        // Wave 3: Junction tables
-        Tables\ProjectUserSeeder::class,
-    ]);
-}
-```
 
 ---
 
-## Level 1 Unit テスト（CRITICAL）
-
-<test-requirement>
-  <principle>
-    テーブル実装時は Unit テストも必ず作成・実行する。
-    テストなしで実装完了としてはならない。
-  </principle>
-
-  <required-tests>
-    <test>Model の create が動作すること</test>
-    <test>リレーションが正しく定義されていること</test>
-    <test>fillable/casts が正しく設定されていること</test>
-  </required-tests>
-
-  <required-commands>
-    <command>php artisan test tests/Unit/Models/{Model}Test.php</command>
-  </required-commands>
-
-  <completion-criteria>
-    テストがすべてパスするまで実装完了としない。
-  </completion-criteria>
-</test-requirement>
+## Level 1 Unit テスト
 
 ```php
-// tests/Unit/Models/UserTest.php
-test('can create user', function () {
-    $user = User::create([
-        'name' => 'Test',
-        'email' => 'test@example.com',
+// tests/Unit/Models/TaskTest.php
+test('can create task', function () {
+    $task = Task::create([
+        'title' => 'Test Task',
+        'completed' => false,
     ]);
 
-    expect($user)->toBeInstanceOf(User::class);
-    expect($user->name)->toBe('Test');
-});
-
-test('user belongs to project', function () {
-    $project = Project::factory()->create();
-    $user = User::create([
-        'name' => 'Test',
-        'email' => 'test@example.com',
-        'project_id' => $project->id,
-    ]);
-
-    expect($user->project)->toBeInstanceOf(Project::class);
+    expect($task)->toBeInstanceOf(Task::class);
+    expect($task->title)->toBe('Test Task');
 });
 ```
 
-**テストレベル: Level 1**（主要なリレーションとCRUD操作、40-60%カバレッジ）
+**テストレベル: Level 1**（主要なCRUD操作）
