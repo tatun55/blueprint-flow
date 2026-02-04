@@ -43,7 +43,7 @@ CREATE TABLE specs (
     status TEXT DEFAULT 'draft',
     working_by TEXT,
     branch TEXT,
-    human_reviewed INTEGER DEFAULT 0,
+    human_reviewed TEXT DEFAULT 'none',  -- none/spec_reviewed/impl_reviewed/test_reviewed
     revision_count INTEGER DEFAULT 0,
     revision_reason TEXT,
     e2e_status TEXT,
@@ -119,6 +119,36 @@ CREATE TABLE spec_dependencies (
 | 1 | 20-40% | 基本操作（表示、主要アクション） |
 | 2 | 40-60% | 追加操作（フォーム、モーダル） |
 | 3 | 60%+ | 全状態・エッジケース（エラー、空状態） |
+
+### Human Review Stages
+
+段階的なレビュー管理。各specは4段階のレビュー状態を持つ。
+
+| Stage | 説明 | タイミング |
+|-------|------|-----------|
+| `none` | 未レビュー | 新規作成時、または変更によるリセット時 |
+| `spec_reviewed` | 仕様レビュー完了 | spec定義が承認された時点 |
+| `impl_reviewed` | 実装レビュー完了 | 実装コードが承認された時点 |
+| `test_reviewed` | テストレビュー完了 | テストが通過し承認された時点 |
+
+**変更時の自動リセット:**
+- specが更新されると、そのspecの`human_reviewed`は`none`にリセット
+- 依存先（そのspecに`depends_on`しているspec）も全て`none`にリセット
+- これにより、変更の影響範囲を追跡し、必要なレビューを強制
+
+```bash
+# レビュー状態の設定
+./scripts/blueprint-db-cli.sh review <id> spec_reviewed
+./scripts/blueprint-db-cli.sh review <id> impl_reviewed
+./scripts/blueprint-db-cli.sh review <id> test_reviewed
+
+# レビュー状態のリセット（依存先も含む）
+./scripts/blueprint-db-cli.sh reset-review <id>
+
+# レビュー状況の確認
+./scripts/blueprint-db-cli.sh review-status
+./scripts/blueprint-db-cli.sh needs-review
+```
 
 ---
 

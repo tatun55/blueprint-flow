@@ -20,8 +20,8 @@ CREATE TABLE IF NOT EXISTS specs (
     -- Git worktree tracking
     branch TEXT,
 
-    -- Review tracking
-    human_reviewed INTEGER DEFAULT 0,
+    -- Review tracking (4-stage: none → spec_reviewed → impl_reviewed → test_reviewed)
+    human_reviewed TEXT DEFAULT 'none' CHECK(human_reviewed IN ('none', 'spec_reviewed', 'impl_reviewed', 'test_reviewed')),
     revision_count INTEGER DEFAULT 0,
     revision_reason TEXT,
 
@@ -172,3 +172,31 @@ FROM specs
 WHERE e2e_status IS NOT NULL
 GROUP BY e2e_level, e2e_status
 ORDER BY e2e_level, e2e_status;
+
+-- View: Human review status summary
+CREATE VIEW IF NOT EXISTS review_summary AS
+SELECT
+    human_reviewed as stage,
+    COUNT(*) as count,
+    GROUP_CONCAT(slug) as specs
+FROM specs
+GROUP BY human_reviewed
+ORDER BY
+    CASE human_reviewed
+        WHEN 'none' THEN 1
+        WHEN 'spec_reviewed' THEN 2
+        WHEN 'impl_reviewed' THEN 3
+        WHEN 'test_reviewed' THEN 4
+    END;
+
+-- View: Specs needing review (not fully reviewed)
+CREATE VIEW IF NOT EXISTS needs_review_specs AS
+SELECT * FROM specs
+WHERE human_reviewed != 'test_reviewed'
+ORDER BY
+    CASE human_reviewed
+        WHEN 'none' THEN 1
+        WHEN 'spec_reviewed' THEN 2
+        WHEN 'impl_reviewed' THEN 3
+    END,
+    category, type;

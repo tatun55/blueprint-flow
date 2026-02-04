@@ -26,12 +26,15 @@ Blueprint CLI Commands:
     needs-attention              Needs revision or blocked
     e2e-pending                  Specs with pending E2E tests
     blockers <id>                Show what blocks a spec
+    review-status                Show human review summary by stage
+    needs-review                 Specs not fully reviewed (human_reviewed != test_reviewed)
 
   Write:
     add <cat> <type> <slug> <name> '<json>'   Add new spec (status: draft)
     update <id> '<json>'         Update spec data
     status <id> <status>         Change status
-    reviewed <id>                Mark as human reviewed
+    review <id> <stage>          Set human review stage (none/spec_reviewed/impl_reviewed/test_reviewed)
+    reset-review <id>            Reset review to 'none' and cascade to dependents
     revision <id> '<reason>'     Mark needs_revision with reason
     e2e-status <id> <status>     Set E2E status (pending/passed/failed)
     e2e-level <id> <level>       Set required E2E level (1-3)
@@ -69,6 +72,12 @@ Test Levels (in spec data.level):
   - 1: Basic (main operations, 20-40% coverage)
   - 2: Standard (forms, modals, 40-60% coverage)
   - 3: Comprehensive (edge cases, errors, 60%+ coverage)
+
+Human Review Stages:
+  - none: Not yet reviewed (initial or reset)
+  - spec_reviewed: Specification reviewed and approved
+  - impl_reviewed: Implementation reviewed and approved
+  - test_reviewed: Test reviewed and approved (complete)
 
 Status Flow:
   draft → pending_review → approved → in_progress → impl_review → testing → done
@@ -114,18 +123,59 @@ case "$1" in
         ;;
 
     update)
-        sqlite3 "$DB_PATH" "UPDATE specs SET data = '$3', human_reviewed = 0 WHERE id = $2;"
+        # Update spec data and reset review for this spec and dependents
+        sqlite3 "$DB_PATH" "UPDATE specs SET data = '$3', human_reviewed = 'none' WHERE id = $2;"
+        # Reset dependents
+        sqlite3 "$DB_PATH" "
+            WITH RECURSIVE dependents AS (
+                SELECT spec_id FROM spec_dependencies WHERE blocked_by_spec_id = $2
+                UNION
+                SELECT d.spec_id FROM spec_dependencies d
+                INNER JOIN dependents ON d.blocked_by_spec_id = dependents.spec_id
+            )
+            UPDATE specs SET human_reviewed = 'none' WHERE id IN (SELECT spec_id FROM dependents);
+        "
         echo '{"success": true}'
         ;;
 
     status)
-        sqlite3 "$DB_PATH" "UPDATE specs SET status = '$3', human_reviewed = 0 WHERE id = $2;"
+        sqlite3 "$DB_PATH" "UPDATE specs SET status = '$3' WHERE id = $2;"
         echo '{"success": true}'
         ;;
 
-    reviewed)
-        sqlite3 "$DB_PATH" "UPDATE specs SET human_reviewed = 1 WHERE id = $2;"
+    review)
+        # Set human review stage: none, spec_reviewed, impl_reviewed, test_reviewed
+        sqlite3 "$DB_PATH" "UPDATE specs SET human_reviewed = '$3' WHERE id = $2;"
         echo '{"success": true}'
+        ;;
+
+    reset-review)
+        # Reset review to 'none' for this spec and all specs that depend on it
+        # First, reset the target spec
+        sqlite3 "$DB_PATH" "UPDATE specs SET human_reviewed = 'none' WHERE id = $2;"
+        # Then, reset all specs that have this spec as a dependency (recursive cascade)
+        sqlite3 "$DB_PATH" "
+            WITH RECURSIVE dependents AS (
+                -- Direct dependents
+                SELECT spec_id FROM spec_dependencies WHERE blocked_by_spec_id = $2
+                UNION
+                -- Recursive dependents
+                SELECT d.spec_id FROM spec_dependencies d
+                INNER JOIN dependents ON d.blocked_by_spec_id = dependents.spec_id
+            )
+            UPDATE specs SET human_reviewed = 'none' WHERE id IN (SELECT spec_id FROM dependents);
+        "
+        # Return count of affected specs
+        COUNT=$(sqlite3 "$DB_PATH" "
+            WITH RECURSIVE dependents AS (
+                SELECT spec_id FROM spec_dependencies WHERE blocked_by_spec_id = $2
+                UNION
+                SELECT d.spec_id FROM spec_dependencies d
+                INNER JOIN dependents ON d.blocked_by_spec_id = dependents.spec_id
+            )
+            SELECT COUNT(*) + 1 FROM dependents;
+        ")
+        echo "{\"success\": true, \"reset_count\": $COUNT}"
         ;;
 
     revision)
@@ -208,6 +258,14 @@ case "$1" in
 
     e2e-pending)
         sqlite3 -json "$DB_PATH" "SELECT * FROM e2e_pending_specs;"
+        ;;
+
+    review-status)
+        sqlite3 -json "$DB_PATH" "SELECT * FROM review_summary;"
+        ;;
+
+    needs-review)
+        sqlite3 -json "$DB_PATH" "SELECT * FROM needs_review_specs;"
         ;;
 
     list-by-status)
