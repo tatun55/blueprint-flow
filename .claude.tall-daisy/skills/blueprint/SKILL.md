@@ -22,6 +22,32 @@ MySQL 8.0+  ← SQLiteではない
 
 ---
 
+## 開発環境（CRITICAL）
+
+### アプリは Valet で常時起動中
+
+```bash
+# APP_URL でアクセス可能（.env で定義）
+APP_URL=$(grep APP_URL .env | cut -d '=' -f2)
+# 例: http://my-todo-app.pizza
+```
+
+**重要**:
+- `php artisan serve` は使用しない（Valetが動作中）
+- アプリへのアクセスは常に APP_URL を使用
+- E2Eテストも APP_URL でアクセス
+
+### Vite (フロントエンド)
+
+開発時は Vite dev server が必要：
+```bash
+npm run dev  # Vite dev server 起動
+```
+
+Vite が起動していないと CSS/JS が読み込まれない。
+
+---
+
 ## アーキテクチャ原則
 
 | 項目 | /blueprint | Agents |
@@ -97,7 +123,65 @@ Types:
   - test: unit, feature, e2e (level 1-3)
 ```
 
-### Test Spec 構造
+### Test Spec 構造（タイプ別）
+
+#### test/unit（Action/Job/Command用）
+
+```json
+{
+  "level": 1,
+  "depends_on": ["action/sync/create-task"],
+  "target": {
+    "type": "action",
+    "class": "App\\Actions\\CreateTask"
+  },
+  "scenarios": [
+    {
+      "name": "success",
+      "description": "正常に実行できる",
+      "input": {"title": "新しいタスク"},
+      "assertions": ["Taskが作成される", "イベントが発火される"]
+    },
+    {
+      "name": "validation-error",
+      "description": "バリデーションエラー",
+      "input": {"title": ""},
+      "assertions": ["例外がスローされる"]
+    }
+  ]
+}
+```
+
+#### test/feature（Livewire Component用）
+
+```json
+{
+  "level": 1,
+  "depends_on": ["ui/pages/todo-index"],
+  "target": {
+    "type": "component",
+    "class": "App\\Livewire\\Pages\\Todo\\Index"
+  },
+  "scenarios": [
+    {
+      "name": "render",
+      "description": "コンポーネントが表示される",
+      "assertions": ["status 200", "タイトルが表示される"]
+    },
+    {
+      "name": "add-task",
+      "description": "タスクを追加できる",
+      "livewire_actions": [
+        {"set": {"title": "新しいタスク"}},
+        {"call": "save"}
+      ],
+      "assertions": ["エラーなし", "DBに保存される"]
+    }
+  ]
+}
+```
+
+#### test/e2e（ブラウザE2Eテスト用）
 
 ```json
 {
@@ -106,19 +190,25 @@ Types:
   "target": {
     "type": "page",
     "url": "/",
-    "component": "App\\Livewire\\Pages\\TodoIndex"
+    "component": "App\\Livewire\\Pages\\Todo\\Index"
   },
   "scenarios": [
     {
       "name": "page-load",
       "description": "ページが正しく表示される",
-      "assertions": ["h1要素が表示される", "タスク一覧が表示される"]
+      "steps": [],
+      "assertions": ["h1要素が表示される", "タスク一覧が表示される"],
+      "screenshot": "00-initial"
     },
     {
       "name": "add-task",
       "description": "タスクを追加できる",
-      "steps": ["入力欄に「新しいタスク」を入力", "追加ボタンをクリック"],
-      "assertions": ["新しいタスクが一覧に表示される", "入力欄がクリアされる"]
+      "steps": [
+        "入力欄に「新しいタスク」を入力",
+        "追加ボタンをクリック"
+      ],
+      "assertions": ["新しいタスクが一覧に表示される", "入力欄がクリアされる"],
+      "screenshots": ["01-add-task-before", "02-add-task-after"]
     }
   ],
   "required_data": [
@@ -126,6 +216,11 @@ Types:
   ]
 }
 ```
+
+**E2E実行環境（CRITICAL）:**
+- playwright-mcp を使用（headless: true）
+- APP_URL でアクセス（Valet）
+- 各シナリオで before/after スクショ必須
 
 **Test Levels:**
 
