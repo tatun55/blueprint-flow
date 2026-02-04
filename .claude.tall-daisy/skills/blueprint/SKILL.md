@@ -292,9 +292,30 @@ Types:
   "depends_on": ["data/tables/tasks"],
   ...
 }
+
+// action/sync/create-task
+{
+  "depends_on": ["data/tables/tasks"],
+  ...
+}
+
+// action/async/send-reminder
+{
+  "depends_on": ["data/tables/tasks", "data/tables/users"],
+  ...
+}
 ```
 
 Agentは実装時に `depends_on` のspecを参照して詳細要件を取得する。
+
+**依存関係の方向:**
+```
+data/tables (依存なし)
+    ↑
+action/sync, action/async (tables に依存)
+    ↑
+ui/pages (tables, actions に依存可能)
+```
 
 ---
 
@@ -346,12 +367,13 @@ Agentは実装時に `depends_on` のspecを参照して詳細要件を取得す
 
 ### ui/pages テンプレート
 
-**必須**: アスキーアートでレイアウトを示す
+**必須**: アスキーアートでレイアウトを示す + depends_on
 
 ```bash
 ./scripts/blueprint-db-cli.sh add ui pages todo-index "Todoメインページ" '{
   "route": "/",
   "component": "Pages/TodoIndex",
+  "depends_on": ["data/tables/tasks"],
   "layout_ascii": "┌─────────────────────────────────────┐\n│  header: Todo App                   │\n├─────────────────────────────────────┤\n│  [新しいタスクを入力...] [追加]      │\n├─────────────────────────────────────┤\n│  ☑ タスク1 (打消線)        [削除]   │\n│  ☐ タスク2                 [削除]   │\n└─────────────────────────────────────┘",
   "modals": [],
   "operations": ["一覧表示", "新規作成", "完了切替", "削除"],
@@ -388,6 +410,48 @@ Agentは実装時に `depends_on` のspecを参照して詳細要件を取得す
 ```
 
 3. **レスポンシブ**: モバイル/デスクトップの違いがある場合は両方示す
+
+### action/sync テンプレート（同期Action）
+
+```bash
+./scripts/blueprint-db-cli.sh add action sync create-task "タスク作成アクション" '{
+  "depends_on": ["data/tables/tasks"],
+  "description": "新しいタスクを作成する",
+  "input": {
+    "title": {"type": "string", "required": true, "max": 255}
+  },
+  "output": "Task",
+  "events": ["TaskCreated"],
+  "class": "App\\Actions\\CreateTask"
+}'
+```
+
+### action/async テンプレート（非同期Job）
+
+```bash
+./scripts/blueprint-db-cli.sh add action async send-reminder "リマインダー送信Job" '{
+  "depends_on": ["data/tables/tasks", "data/tables/users"],
+  "description": "期限が近いタスクのリマインダーを送信",
+  "trigger": "TaskDueSoon event",
+  "input": {
+    "task_id": {"type": "int", "required": true}
+  },
+  "queue": "notifications",
+  "class": "App\\Jobs\\SendReminder"
+}'
+```
+
+### action/scheduled テンプレート（スケジュールCommand）
+
+```bash
+./scripts/blueprint-db-cli.sh add action scheduled cleanup-old-tasks "古いタスク削除Command" '{
+  "depends_on": ["data/tables/tasks"],
+  "description": "30日以上前の完了タスクを削除",
+  "schedule": "daily",
+  "signature": "app:cleanup-old-tasks",
+  "class": "App\\Console\\Commands\\CleanupOldTasks"
+}'
+```
 
 ---
 

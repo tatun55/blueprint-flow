@@ -9,6 +9,39 @@
 ```
 → プロジェクト概要を把握
 
+---
+
+## 実装フロー（CRITICAL）
+
+<implementation-flow>
+  <principle>
+    action spec の depends_on を確認し、依存テーブルのModelを把握してから実装する。
+  </principle>
+
+  <step name="1-get-spec">
+    <action>action spec を取得</action>
+    <command>./scripts/blueprint-db-cli.sh get action {type} {slug}</command>
+    <extract>depends_on, input, output, events</extract>
+  </step>
+
+  <step name="2-check-deps">
+    <condition>depends_on に data/tables がある場合</condition>
+    <action>依存テーブルのspec を取得してModel構造を把握</action>
+    <command>./scripts/blueprint-db-cli.sh get data tables {table-slug}</command>
+  </step>
+
+  <step name="3-implement">
+    <action>Action/Job/Command クラスを実装</action>
+    <note>依存Modelのcolumns, relationsを参照しながら実装</note>
+  </step>
+
+  <step name="4-test">
+    <action>Unit テスト作成・実行</action>
+  </step>
+</implementation-flow>
+
+---
+
 ## スタック
 
 ```
