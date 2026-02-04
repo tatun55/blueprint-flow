@@ -24,204 +24,175 @@ sqlite3 -json $DB "SELECT * FROM specs WHERE category='core' AND type='overview'
 sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"
 
 # depends_on から対象の ui/pages または action spec を取得
-
-# E2E の場合は環境確認
-APP_URL=$(grep APP_URL .env | cut -d '=' -f2)
-lsof -i :5173 > /dev/null 2>&1 || (npm run dev &; sleep 3)
 ```
 
 ---
 
-## テスト実行フロー
+## E2E テスト実行（CRITICAL）
 
-<test-execution-flow>
+### playwright-mcp を使用する
+
+**Playwright をインストールしてはいけない。playwright-mcp が MCP サーバーとして利用可能。**
+
+```
+mcp__playwright-mcp__playwright_navigate  # URL遷移
+mcp__playwright-mcp__playwright_screenshot # スクショ取得
+mcp__playwright-mcp__playwright_click     # クリック
+mcp__playwright-mcp__playwright_fill      # 入力
+mcp__playwright-mcp__playwright_get_visible_text # テキスト取得
+mcp__playwright-mcp__playwright_close     # 終了時は必ず閉じる
+```
+
+### APP_URL でアクセス可能
+
+アプリは Valet で動作中。`.env` の `APP_URL` でアクセスできる。
+
+```bash
+APP_URL=$(grep APP_URL .env | cut -d '=' -f2)
+# 例: http://my-todo-app-2026-02-03-v5.test
+```
+
+### テスト用API・エンドポイントは作成しない
+
+- シーダーでテストデータが投入済み
+- 実際のアプリにブラウザでアクセスしてテスト
+- データリセットが必要なら `php artisan migrate:fresh --seed`
+
+---
+
+## E2E テスト実行フロー
+
+<e2e-test-flow>
   <principle>
-    テスト設計は spec に含まれている。spec の scenarios からテストコードを生成・実行する。
+    playwright-mcp でブラウザ操作。テストコードファイルは作成しない。
+    APP_URL でアプリにアクセスし、spec.scenarios を順次実行。
     **AskUserQuestion は使用しない。必要な情報は全て spec に含まれている。**
   </principle>
 
   <step name="1-get-spec">
     <action>test spec を取得</action>
     <command>sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"</command>
-    <extract>level, depends_on, target, scenarios, required_data</extract>
+    <extract>level, depends_on, target, scenarios</extract>
   </step>
 
-  <step name="2-get-target-spec">
-    <action>depends_on からテスト対象の spec を取得</action>
-    <note>UI構造やModel構造を把握するため</note>
+  <step name="2-get-app-url">
+    <action>APP_URL を取得</action>
+    <command>grep APP_URL .env | cut -d '=' -f2</command>
   </step>
 
-  <step name="3-generate-code">
-    <action>spec.scenarios からテストコードを生成</action>
-    <mapping>
-      <map type="unit" output="tests/Unit/{path}/{Name}Test.php" />
-      <map type="feature" output="tests/Feature/{path}/{Name}Test.php" />
-      <map type="e2e" output="tests/e2e/specs/{slug}.spec.ts" />
-    </mapping>
+  <step name="3-reset-data">
+    <action>テストデータをリセット（必要な場合）</action>
+    <command>php artisan migrate:fresh --seed</command>
   </step>
 
-  <step name="4-execute">
-    <action>テストを実行</action>
-    <commands>
-      <unit>php artisan test tests/Unit/{path}/{Name}Test.php</unit>
-      <feature>php artisan test tests/Feature/{path}/{Name}Test.php</feature>
-      <e2e>npx playwright test tests/e2e/specs/{slug}.spec.ts</e2e>
-    </commands>
+  <step name="4-execute-scenarios">
+    <action>各 scenario を playwright-mcp で実行</action>
+    <for-each scenario="scenarios">
+      <sub-step>navigate to APP_URL + target.url</sub-step>
+      <sub-step>execute scenario.steps</sub-step>
+      <sub-step>verify scenario.assertions</sub-step>
+      <sub-step>screenshot for evidence</sub-step>
+    </for-each>
   </step>
 
-  <step name="5-report">
+  <step name="5-close-browser">
+    <action>ブラウザを閉じる</action>
+    <command>mcp__playwright-mcp__playwright_close</command>
+  </step>
+
+  <step name="6-report">
     <action>テスト結果を報告（親agentへ返す）</action>
-    <content>テスト件数、成功/失敗、失敗詳細</content>
+    <content>シナリオ件数、成功/失敗、失敗詳細、スクリーンショットパス</content>
   </step>
-</test-execution-flow>
+</e2e-test-flow>
 
 ---
 
-## 出力物
+## playwright-mcp パターン集
 
-| Type | Output |
-|------|--------|
-| unit | `tests/Unit/{path}/{Name}Test.php` |
-| feature | `tests/Feature/{path}/{Name}Test.php` |
-| e2e | `tests/e2e/specs/{slug}.spec.ts` |
+### ページ遷移
 
----
+```
+mcp__playwright-mcp__playwright_navigate({ url: "http://app.test/", headless: true })
+```
 
-## Test Spec 構造
+### 入力
 
-```json
-{
-  "level": 1,
-  "depends_on": ["ui/pages/todo-index"],
-  "target": {
-    "type": "page",
-    "url": "/",
-    "component": "App\\Livewire\\Pages\\TodoIndex"
-  },
-  "scenarios": [
-    {
-      "name": "page-load",
-      "description": "ページが正しく表示される",
-      "assertions": ["h1要素が表示される", "タスク一覧が表示される"]
-    },
-    {
-      "name": "add-task",
-      "description": "タスクを追加できる",
-      "steps": ["入力欄に「新しいタスク」を入力", "追加ボタンをクリック"],
-      "assertions": ["新しいタスクが一覧に表示される"]
-    }
-  ],
-  "required_data": [
-    {"_comment": "完了状態テスト用", "title": "完了タスク", "completed": true}
-  ]
-}
+```
+mcp__playwright-mcp__playwright_fill({ selector: "input[type='text']", value: "新しいタスク" })
+```
+
+### クリック
+
+```
+mcp__playwright-mcp__playwright_click({ selector: "button:has-text('追加')" })
+```
+
+### テキスト確認
+
+```
+mcp__playwright-mcp__playwright_get_visible_text()
+# 結果に期待するテキストが含まれるか確認
+```
+
+### スクリーンショット
+
+```
+mcp__playwright-mcp__playwright_screenshot({
+  name: "scenario-name",
+  savePng: true,
+  downloadsDir: "tests/e2e/screenshots"
+})
+```
+
+### Livewire 更新待機
+
+Livewire操作後は少し待つ:
+```
+mcp__playwright-mcp__playwright_screenshot  # 待機代わりにスクショ
+```
+
+### ブラウザ終了（必須）
+
+```
+mcp__playwright-mcp__playwright_close()
 ```
 
 ---
 
-## E2E テストコード生成
+## scenario → playwright-mcp 変換
 
-### テンプレート
-
-```typescript
-// tests/e2e/specs/{slug}.spec.ts
-import { test, expect } from '@playwright/test';
-
-const BASE_URL = process.env.APP_URL || 'http://localhost:8000';
-
-test.describe('{ページ名}', () => {
-  // scenarios[0] から生成
-  test('{scenario.name}: {scenario.description}', async ({ page }) => {
-    await page.goto(BASE_URL + '{target.url}');
-
-    // scenario.steps があれば実行
-    // await page.fill('...', '...');
-    // await page.click('...');
-
-    // Livewire更新待機（必要な場合）
-    // await page.waitForResponse(response =>
-    //   response.url().includes('/livewire/update') && response.status() === 200
-    // );
-
-    // scenario.assertions から生成
-    await expect(page.locator('h1')).toBeVisible();
-  });
-});
-```
-
-### scenario → テストコード変換
-
-| Scenario Item | Test Code |
-|---------------|-----------|
-| `assertions: ["h1要素が表示される"]` | `await expect(page.locator('h1')).toBeVisible();` |
-| `assertions: ["タスク一覧が表示される"]` | `await expect(page.locator('[data-testid="task-list"]')).toBeVisible();` |
-| `steps: ["入力欄に「xxx」を入力"]` | `await page.fill('input[type="text"]', 'xxx');` |
-| `steps: ["追加ボタンをクリック"]` | `await page.click('button:has-text("追加")');` |
+| Scenario Item | playwright-mcp |
+|---------------|----------------|
+| `steps: ["入力欄に「xxx」を入力"]` | `playwright_fill({ selector: "input", value: "xxx" })` |
+| `steps: ["追加ボタンをクリック"]` | `playwright_click({ selector: "button:has-text('追加')" })` |
+| `steps: ["チェックボックスをクリック"]` | `playwright_click({ selector: "input[type='checkbox']" })` |
+| `assertions: ["h1要素が表示される"]` | `get_visible_text` で h1 テキストを確認 |
+| `assertions: ["タスク一覧が表示される"]` | `get_visible_text` でタスク名を確認 |
 
 ---
 
-## Feature テストコード生成
+## Unit / Feature テスト
 
-### テンプレート
+Unit / Feature テストは従来通り Pest PHP で実行:
+
+```bash
+# Unit テスト
+php artisan test tests/Unit/{path}/{Name}Test.php
+
+# Feature テスト
+php artisan test tests/Feature/Livewire/{Component}Test.php
+```
+
+### Feature テストテンプレート
 
 ```php
-// tests/Feature/Livewire/{Component}Test.php
 use Livewire\Livewire;
 
-test('{scenario.name}: {scenario.description}', function () {
+test('{scenario.description}', function () {
     Livewire::test({target.component}::class)
         ->assertStatus(200);
 });
-```
-
----
-
-## Unit テストコード生成
-
-### テンプレート
-
-```php
-// tests/Unit/{path}/{Name}Test.php
-test('{scenario.name}: {scenario.description}', function () {
-    // scenario.assertions に基づく
-});
-```
-
----
-
-## Playwright パターン集
-
-### Livewire待機
-
-```typescript
-await page.waitForResponse(response =>
-  response.url().includes('/livewire/update') && response.status() === 200
-);
-```
-
-### ダイアログ処理
-
-```typescript
-page.on('dialog', dialog => dialog.accept());
-```
-
-### セレクタ優先順位
-
-1. `data-testid="xxx"` → `[data-testid="xxx"]`
-2. テキスト → `text=Submit`
-3. Role → `role=button[name="Submit"]`
-4. CSS → `.btn-primary`
-
-### 要素数の確認
-
-```typescript
-await expect(page.locator('li')).toHaveCount(3);
-```
-
-### クラス名の確認
-
-```typescript
-await expect(page.locator('li:first-of-type')).toHaveClass(/line-through/);
 ```
 
 ---
@@ -233,20 +204,3 @@ await expect(page.locator('li:first-of-type')).toHaveClass(/line-through/);
 | 1 | 20-40% | 基本操作（ページ表示、主要アクション） |
 | 2 | 40-60% | 追加操作（フォーム、モーダル） |
 | 3 | 60%+ | 全状態・エッジケース（エラー、空状態） |
-
----
-
-## 実行コマンド
-
-```bash
-# Unit テスト
-php artisan test tests/Unit/{path}/{Name}Test.php
-
-# Feature テスト
-php artisan test tests/Feature/{path}/{Name}Test.php
-
-# E2E テスト
-npx playwright test tests/e2e/specs/{slug}.spec.ts
-npx playwright test --headed    # ブラウザ表示
-npx playwright test --ui        # UIモード
-```
