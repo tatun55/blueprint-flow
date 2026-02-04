@@ -30,13 +30,18 @@ sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"
 
 ## E2E テスト実行（CRITICAL）
 
-### playwright-mcp を使用する
+### playwright-mcp を使用する（headless モード）
 
 **Playwright をインストールしてはいけない。playwright-mcp が MCP サーバーとして利用可能。**
 
+デフォルト設定（~/.claude/CLAUDE.md で定義済み）:
+- `headless: true` - ブラウザUIを表示しない
+- `savePng: true` - スクリーンショットをPNG保存
+- `downloadsDir`: プロジェクトルート
+
 ```
-mcp__playwright-mcp__playwright_navigate  # URL遷移
-mcp__playwright-mcp__playwright_screenshot # スクショ取得
+mcp__playwright-mcp__playwright_navigate  # URL遷移 (headless: true)
+mcp__playwright-mcp__playwright_screenshot # スクショ取得 (savePng: true)
 mcp__playwright-mcp__playwright_click     # クリック
 mcp__playwright-mcp__playwright_fill      # 入力
 mcp__playwright-mcp__playwright_get_visible_text # テキスト取得
@@ -110,10 +115,11 @@ APP_URL=$(grep APP_URL .env | cut -d '=' -f2)
 
 ## playwright-mcp パターン集
 
-### ページ遷移
+### ページ遷移（headless: true がデフォルト）
 
 ```
-mcp__playwright-mcp__playwright_navigate({ url: "http://app.test/", headless: true })
+mcp__playwright-mcp__playwright_navigate({ url: "http://app.test/" })
+# headless: true は ~/.claude/CLAUDE.md でデフォルト設定済み
 ```
 
 ### 入力
