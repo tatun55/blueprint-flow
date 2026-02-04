@@ -13,14 +13,15 @@ action-agentとして実行: spec_id={id}
 ## 最初に実行すること
 
 ```bash
+DB=".blueprint-flow/blueprint/blueprint.db"
+
 # プロジェクト概要を把握
-./scripts/blueprint-db-cli.sh get core overview main
+sqlite3 -json $DB "SELECT * FROM specs WHERE category='core' AND type='overview'"
 
 # 対象の spec を取得
-./scripts/blueprint-db-cli.sh sql "SELECT * FROM specs WHERE id = {spec_id}"
+sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"
 
 # depends_on があれば依存先も取得（Model構造把握のため）
-./scripts/blueprint-db-cli.sh get data tables {depends_on_slug}
 ```
 
 ---
@@ -35,14 +36,14 @@ action-agentとして実行: spec_id={id}
 
   <step name="1-get-spec">
     <action>action spec を取得</action>
-    <command>./scripts/blueprint-db-cli.sh get action {type} {slug}</command>
+    <command>sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"</command>
     <extract>depends_on, input, output, events</extract>
   </step>
 
   <step name="2-check-deps">
     <condition>depends_on に data/tables がある場合</condition>
     <action>依存テーブルのspec を取得してModel構造を把握</action>
-    <command>./scripts/blueprint-db-cli.sh get data tables {table-slug}</command>
+    <command>sqlite3 -json $DB "SELECT * FROM specs WHERE id = {depends_on_id}"</command>
   </step>
 
   <step name="3-implement">

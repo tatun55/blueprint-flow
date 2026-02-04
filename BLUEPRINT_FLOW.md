@@ -136,18 +136,73 @@ CREATE TABLE spec_dependencies (
 - 依存先（そのspecに`depends_on`しているspec）も全て`none`にリセット
 - これにより、変更の影響範囲を追跡し、必要なレビューを強制
 
+---
+
+## SQLパターン集
+
+blueprint.db への直接アクセス。CLIラッパーは不要。
+
 ```bash
-# レビュー状態の設定
-./scripts/blueprint-db-cli.sh review <id> spec_reviewed
-./scripts/blueprint-db-cli.sh review <id> impl_reviewed
-./scripts/blueprint-db-cli.sh review <id> test_reviewed
+# DB パス（プロジェクトルートから）
+DB=".blueprint-flow/blueprint/blueprint.db"
 
-# レビュー状態のリセット（依存先も含む）
-./scripts/blueprint-db-cli.sh reset-review <id>
+# 初期化・リセット（スクリプト使用）
+./scripts/blueprint-db-cli.sh init
+./scripts/blueprint-db-cli.sh reset
+```
 
-# レビュー状況の確認
-./scripts/blueprint-db-cli.sh review-status
-./scripts/blueprint-db-cli.sh needs-review
+### 読み取り
+
+```bash
+# 全spec一覧
+sqlite3 -json $DB "SELECT id, category, type, slug, name, status, human_reviewed FROM specs ORDER BY id"
+
+# 特定のspec取得
+sqlite3 -json $DB "SELECT * FROM specs WHERE id = 1"
+sqlite3 -json $DB "SELECT * FROM specs WHERE category = 'ui' AND type = 'pages' AND slug = 'todo-index'"
+
+# ビュー使用
+sqlite3 -json $DB "SELECT * FROM available_with_deps"      # 実装可能（依存解決済み）
+sqlite3 -json $DB "SELECT * FROM progress_summary"          # ステータス別集計
+sqlite3 -json $DB "SELECT * FROM review_summary"            # レビュー段階別集計
+sqlite3 -json $DB "SELECT * FROM needs_review_specs"        # 未完了レビュー
+sqlite3 -json $DB "SELECT * FROM spec_blockers WHERE id=3"  # 依存関係確認
+```
+
+### 書き込み
+
+```bash
+# Spec追加
+sqlite3 $DB "INSERT INTO specs (category, type, slug, name, data) VALUES ('data', 'tables', 'tasks', 'Tasks', '{\"columns\":[\"id\",\"title\"]}')"
+
+# ステータス更新
+sqlite3 $DB "UPDATE specs SET status = 'approved' WHERE id = 1"
+
+# レビュー段階更新
+sqlite3 $DB "UPDATE specs SET human_reviewed = 'spec_reviewed' WHERE id = 1"
+
+# 依存関係追加（id=2 は id=1 に依存）
+sqlite3 $DB "INSERT INTO spec_dependencies (spec_id, blocked_by_spec_id) VALUES (2, 1)"
+```
+
+### カスケードリセット
+
+spec更新時に依存先のレビューもリセット:
+
+```bash
+# 対象ID
+ID=1
+
+# 自身と全依存先をリセット
+sqlite3 $DB "
+WITH RECURSIVE deps AS (
+  SELECT $ID as id
+  UNION
+  SELECT d.spec_id FROM spec_dependencies d
+  JOIN deps ON d.blocked_by_spec_id = deps.id
+)
+UPDATE specs SET human_reviewed = 'none' WHERE id IN (SELECT id FROM deps)
+"
 ```
 
 ---
@@ -206,21 +261,6 @@ Task tool:
 ```
 
 **Agents は AskUserQuestion を使用しない。必要な情報は全て spec に含める。**
-
-### 使用するCLIコマンド
-
-```bash
-# 状況確認
-./scripts/blueprint-db-cli.sh overview
-./scripts/blueprint-db-cli.sh progress
-./scripts/blueprint-db-cli.sh available-with-deps
-
-# Spec 管理
-./scripts/blueprint-db-cli.sh add <cat> <type> <slug> <name> '<json>'
-./scripts/blueprint-db-cli.sh update <id> '<json>'
-./scripts/blueprint-db-cli.sh status <id> <status>
-./scripts/blueprint-db-cli.sh add-dep <id> <blocked_by_id>
-```
 
 ---
 
@@ -308,8 +348,9 @@ spec_id を受け取り、自律的に仕様を取得して実装
 
 ### 最初に実行すること
 ```bash
-./scripts/blueprint-db-cli.sh get core overview main
-./scripts/blueprint-db-cli.sh get data tables {slug}  # spec_id から取得
+DB=".blueprint-flow/blueprint/blueprint.db"
+sqlite3 -json $DB "SELECT * FROM specs WHERE category='core' AND type='overview'"
+sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"
 ```
 
 ### 出力物
@@ -346,8 +387,9 @@ spec_id を受け取り、自律的に仕様を取得して実装
 
 ### 最初に実行すること
 ```bash
-./scripts/blueprint-db-cli.sh get core overview main
-./scripts/blueprint-db-cli.sh get ui pages {slug}  # spec_id から取得
+DB=".blueprint-flow/blueprint/blueprint.db"
+sqlite3 -json $DB "SELECT * FROM specs WHERE category='core' AND type='overview'"
+sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"
 # depends_on があれば依存先も取得
 ```
 
@@ -369,8 +411,9 @@ spec_id を受け取り、自律的に仕様を取得して実装
 
 ### 最初に実行すること
 ```bash
-./scripts/blueprint-db-cli.sh get core overview main
-./scripts/blueprint-db-cli.sh get action {type} {slug}  # spec_id から取得
+DB=".blueprint-flow/blueprint/blueprint.db"
+sqlite3 -json $DB "SELECT * FROM specs WHERE category='core' AND type='overview'"
+sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"
 # depends_on があれば依存先も取得
 ```
 
@@ -395,7 +438,8 @@ spec_id (test/unit, test/feature, test/e2e) を受け取り、テストコード
 
 ### 最初に実行すること
 ```bash
-./scripts/blueprint-db-cli.sh get test {type} {slug}  # spec_id から取得
+DB=".blueprint-flow/blueprint/blueprint.db"
+sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"
 # depends_on から対象の ui/pages または action spec を取得
 ```
 

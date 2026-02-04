@@ -13,14 +13,13 @@ db-agentとして実行: spec_id={id}
 ## 最初に実行すること
 
 ```bash
+DB=".blueprint-flow/blueprint/blueprint.db"
+
 # プロジェクト概要を把握
-./scripts/blueprint-db-cli.sh get core overview main
+sqlite3 -json $DB "SELECT * FROM specs WHERE category='core' AND type='overview'"
 
-# 対象の spec を取得（idが分かっている場合）
-./scripts/blueprint-db-cli.sh sql "SELECT * FROM specs WHERE id = {spec_id}"
-
-# または slug から取得
-./scripts/blueprint-db-cli.sh get data tables {slug}
+# 対象の spec を取得
+sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"
 ```
 
 ---
@@ -36,7 +35,7 @@ db-agentとして実行: spec_id={id}
 
   <step name="1-get-spec">
     <action>テーブル spec を取得（シーダー定義を含む）</action>
-    <command>./scripts/blueprint-db-cli.sh get data tables {table-slug}</command>
+    <command>sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"</command>
     <extract>columns, indexes, relations, seeders.dev</extract>
   </step>
 

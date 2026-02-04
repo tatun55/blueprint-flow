@@ -15,14 +15,15 @@ livewire-agentとして実行: spec_id={id}
 ## 最初に実行すること
 
 ```bash
+DB=".blueprint-flow/blueprint/blueprint.db"
+
 # プロジェクト概要を把握
-./scripts/blueprint-db-cli.sh get core overview main
+sqlite3 -json $DB "SELECT * FROM specs WHERE category='core' AND type='overview'"
 
 # 対象の spec を取得
-./scripts/blueprint-db-cli.sh sql "SELECT * FROM specs WHERE id = {spec_id}"
+sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"
 
 # depends_on があれば依存先も取得（Model構造把握のため）
-./scripts/blueprint-db-cli.sh get data tables {depends_on_slug}
 ```
 
 ---
@@ -37,7 +38,7 @@ livewire-agentとして実行: spec_id={id}
 
   <step name="1-get-spec">
     <action>ui/pages spec を取得</action>
-    <command>./scripts/blueprint-db-cli.sh get ui pages {slug}</command>
+    <command>sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"</command>
     <extract>route, component, layout_ascii, operations, depends_on</extract>
   </step>
 
@@ -52,7 +53,7 @@ livewire-agentとして実行: spec_id={id}
 
   <step name="3-get-model-info">
     <action>依存テーブルのspec を取得してModel構造を把握</action>
-    <command>./scripts/blueprint-db-cli.sh get data tables {slug}</command>
+    <command>sqlite3 -json $DB "SELECT * FROM specs WHERE id = {depends_on_id}"</command>
     <extract>columns, relations（UIで使用するデータ構造を理解）</extract>
   </step>
 

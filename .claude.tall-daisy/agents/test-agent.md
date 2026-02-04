@@ -15,14 +15,15 @@ test-agentとして実行: spec_id={id}
 ## 最初に実行すること
 
 ```bash
+DB=".blueprint-flow/blueprint/blueprint.db"
+
 # プロジェクト概要を把握
-./scripts/blueprint-db-cli.sh get core overview main
+sqlite3 -json $DB "SELECT * FROM specs WHERE category='core' AND type='overview'"
 
 # 対象の test spec を取得
-./scripts/blueprint-db-cli.sh sql "SELECT * FROM specs WHERE id = {spec_id}"
+sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"
 
 # depends_on から対象の ui/pages または action spec を取得
-./scripts/blueprint-db-cli.sh get ui pages {depends_on_slug}
 
 # E2E の場合は環境確認
 APP_URL=$(grep APP_URL .env | cut -d '=' -f2)
@@ -41,7 +42,7 @@ lsof -i :5173 > /dev/null 2>&1 || (npm run dev &; sleep 3)
 
   <step name="1-get-spec">
     <action>test spec を取得</action>
-    <command>./scripts/blueprint-db-cli.sh get test {type} {slug}</command>
+    <command>sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"</command>
     <extract>level, depends_on, target, scenarios, required_data</extract>
   </step>
 

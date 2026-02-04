@@ -43,8 +43,9 @@ git add .blueprint-flow && git commit -m "Update blueprint-flow submodule"
 
 1. プロジェクト状況を確認
 ```bash
-./scripts/blueprint-db-cli.sh overview
-./scripts/blueprint-db-cli.sh progress
+DB=".blueprint-flow/blueprint/blueprint.db"
+sqlite3 -json $DB "SELECT id, category, type, slug, name, status, human_reviewed FROM specs ORDER BY id"
+sqlite3 -json $DB "SELECT * FROM progress_summary"
 ```
 
 2. 状況を分析して推奨アクションを提示
@@ -176,7 +177,7 @@ approved の spec がある場合、依存関係を解決して Agents を起動
 
 <orchestration-flow>
   <step name="1-get-ready-specs">
-    <command>./scripts/blueprint-db-cli.sh available-with-deps</command>
+    <command>sqlite3 -json $DB "SELECT * FROM available_with_deps"</command>
     <output>依存が解決済みの approved specs</output>
   </step>
 
@@ -230,7 +231,7 @@ Task(subagent_type="general-purpose", prompt="action-agentとして実行: spec_
 
 <test-orchestration>
   <step name="1-check-test-specs">
-    <command>./scripts/blueprint-db-cli.sh list test</command>
+    <command>sqlite3 -json $DB "SELECT * FROM specs WHERE category='test'"</command>
   </step>
 
   <step name="2-verify-dependencies">
@@ -259,87 +260,32 @@ Task(subagent_type="general-purpose", prompt="action-agentとして実行: spec_
 
 ### data/tables テンプレート
 
-```bash
-./scripts/blueprint-db-cli.sh add data tables tasks "tasksテーブル" '{
-  "columns": [
-    {"name": "id", "type": "bigint", "primary": true},
-    {"name": "title", "type": "string", "nullable": false, "max": 255},
-    {"name": "completed", "type": "boolean", "default": false},
-    {"name": "timestamps", "type": "timestamps"}
-  ],
-  "indexes": [],
-  "relations": [],
-  "seeders": {
-    "dev": [
-      {"_comment": "基本状態（一覧表示テスト用）", "title": "買い物に行く", "completed": false},
-      {"_comment": "完了状態（完了表示テスト用）", "title": "レポートを書く", "completed": true}
-    ]
-  }
-}'
+```sql
+INSERT INTO specs (category, type, slug, name, data) VALUES (
+  'data', 'tables', 'tasks', 'tasksテーブル',
+  '{"columns":[{"name":"id","type":"bigint","primary":true},{"name":"title","type":"string","nullable":false,"max":255},{"name":"completed","type":"boolean","default":false},{"name":"timestamps","type":"timestamps"}],"indexes":[],"relations":[],"seeders":{"dev":[{"_comment":"基本状態","title":"買い物に行く","completed":false},{"_comment":"完了状態","title":"レポートを書く","completed":true}]}}'
+);
 ```
 
 ### ui/pages テンプレート
 
-```bash
-./scripts/blueprint-db-cli.sh add ui pages todo-index "Todoメインページ" '{
-  "route": "/",
-  "component": "Pages/TodoIndex",
-  "depends_on": ["data/tables/tasks"],
-  "layout_ascii": "...",
-  "operations": ["一覧表示", "新規作成", "完了切替", "削除"]
-}'
+```sql
+INSERT INTO specs (category, type, slug, name, data, e2e_status) VALUES (
+  'ui', 'pages', 'todo-index', 'Todoメインページ',
+  '{"route":"/","component":"Pages/TodoIndex","depends_on":["data/tables/tasks"],"layout_ascii":"...","operations":["一覧表示","新規作成","完了切替","削除"]}',
+  'pending'
+);
+-- 依存関係を追加
+INSERT INTO spec_dependencies (spec_id, blocked_by_spec_id) VALUES (2, 1);
 ```
 
 ### test/e2e テンプレート
 
-```bash
-./scripts/blueprint-db-cli.sh add test e2e todo-index "Todoページ E2Eテスト" '{
-  "level": 1,
-  "depends_on": ["ui/pages/todo-index"],
-  "target": {
-    "type": "page",
-    "url": "/",
-    "component": "App\\Livewire\\Pages\\TodoIndex"
-  },
-  "scenarios": [
-    {
-      "name": "page-load",
-      "description": "ページが正しく表示される",
-      "assertions": ["h1要素が表示される", "タスク一覧が表示される"]
-    },
-    {
-      "name": "add-task",
-      "description": "タスクを追加できる",
-      "steps": ["入力欄に「新しいタスク」を入力", "追加ボタンをクリック"],
-      "assertions": ["新しいタスクが一覧に表示される"]
-    }
-  ],
-  "required_data": []
-}'
-```
-
-### test/feature テンプレート
-
-```bash
-./scripts/blueprint-db-cli.sh add test feature todo-index "Todoページ Featureテスト" '{
-  "level": 1,
-  "depends_on": ["ui/pages/todo-index"],
-  "target": {
-    "component": "App\\Livewire\\Pages\\TodoIndex"
-  },
-  "scenarios": [
-    {
-      "name": "display",
-      "description": "コンポーネントが表示される",
-      "assertions": ["status 200", "タスク一覧が表示"]
-    },
-    {
-      "name": "add-task",
-      "description": "タスクを追加できる",
-      "assertions": ["DBに保存される", "一覧に表示される"]
-    }
-  ]
-}'
+```sql
+INSERT INTO specs (category, type, slug, name, data) VALUES (
+  'test', 'e2e', 'todo-index', 'Todoページ E2Eテスト',
+  '{"level":1,"depends_on":["ui/pages/todo-index"],"target":{"type":"page","url":"/","component":"App\\Livewire\\Pages\\TodoIndex"},"scenarios":[{"name":"page-load","description":"ページが正しく表示される","assertions":["h1要素が表示される","タスク一覧が表示される"]},{"name":"add-task","description":"タスクを追加できる","steps":["入力欄に「新しいタスク」を入力","追加ボタンをクリック"],"assertions":["新しいタスクが一覧に表示される"]}],"required_data":[]}'
+);
 ```
 
 ---
@@ -361,8 +307,8 @@ Task(subagent_type="general-purpose", prompt="action-agentとして実行: spec_
   <step name="2-fix">
     <action>問題に応じて修正</action>
     <spec-fix>
-      <command>./scripts/blueprint-db-cli.sh update {id} '{...}'</command>
-      <command>./scripts/blueprint-db-cli.sh status {id} approved</command>
+      <command>sqlite3 $DB "UPDATE specs SET data = '{...}', human_reviewed = 'none' WHERE id = {id}"</command>
+      <command>sqlite3 $DB "UPDATE specs SET status = 'approved' WHERE id = {id}"</command>
     </spec-fix>
   </step>
 
@@ -373,25 +319,32 @@ Task(subagent_type="general-purpose", prompt="action-agentとして実行: spec_
 
 ---
 
-## CLIコマンド
+## SQLパターン
 
 ```bash
+DB=".blueprint-flow/blueprint/blueprint.db"
+
 # 状況確認
-./scripts/blueprint-db-cli.sh overview
-./scripts/blueprint-db-cli.sh progress
-./scripts/blueprint-db-cli.sh available-with-deps
+sqlite3 -json $DB "SELECT id, category, type, slug, name, status, human_reviewed FROM specs ORDER BY id"
+sqlite3 -json $DB "SELECT * FROM progress_summary"
+sqlite3 -json $DB "SELECT * FROM available_with_deps"
+sqlite3 -json $DB "SELECT * FROM review_summary"
 
-# Spec 管理
-./scripts/blueprint-db-cli.sh add <cat> <type> <slug> <name> '<json>'
-./scripts/blueprint-db-cli.sh update <id> '<json>'
-./scripts/blueprint-db-cli.sh status <id> <status>
-./scripts/blueprint-db-cli.sh add-dep <id> <blocked_by_id>
-./scripts/blueprint-db-cli.sh reviewed <id>
+# Spec 追加
+sqlite3 $DB "INSERT INTO specs (category, type, slug, name, data) VALUES ('data', 'tables', 'tasks', 'Tasks', '{...}')"
 
-# Test管理
-./scripts/blueprint-db-cli.sh list test
-./scripts/blueprint-db-cli.sh list test e2e
-./scripts/e2e-db-cli.sh overview
+# Spec 更新（依存先もレビューリセット）
+sqlite3 $DB "UPDATE specs SET data = '{...}', human_reviewed = 'none' WHERE id = 1"
+sqlite3 $DB "WITH RECURSIVE deps AS (SELECT 1 as id UNION SELECT d.spec_id FROM spec_dependencies d JOIN deps ON d.blocked_by_spec_id = deps.id) UPDATE specs SET human_reviewed = 'none' WHERE id IN (SELECT id FROM deps)"
+
+# ステータス更新
+sqlite3 $DB "UPDATE specs SET status = 'approved' WHERE id = 1"
+
+# レビュー更新
+sqlite3 $DB "UPDATE specs SET human_reviewed = 'spec_reviewed' WHERE id = 1"
+
+# 依存関係追加
+sqlite3 $DB "INSERT INTO spec_dependencies (spec_id, blocked_by_spec_id) VALUES (2, 1)"
 ```
 
 ---
