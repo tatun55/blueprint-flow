@@ -100,7 +100,7 @@ APP_URL=$(grep APP_URL .env | cut -d '=' -f2)
   <step name="5-execute-scenarios">
     <action>各 scenario を playwright-mcp で実行</action>
     <for-each scenario="scenarios">
-      <sub-step>navigate: APP_URL + target.url にアクセス</sub-step>
+      <sub-step>navigate: playwright_navigate({ url: APP_URL, headless: true })</sub-step>
       <sub-step>screenshot-before: 操作前の状態をスクショ (例: 01-{scenario}-before.png)</sub-step>
       <sub-step>execute: scenario.steps を実行</sub-step>
       <sub-step>screenshot-after: 操作後の状態をスクショ (例: 02-{scenario}-after.png)</sub-step>
@@ -139,12 +139,13 @@ APP_URL=$(grep APP_URL .env | cut -d '=' -f2)
 
 ## playwright-mcp パターン集
 
-### ページ遷移（headless: true がデフォルト）
+### ページ遷移（headless: true 必須）
 
 ```
-mcp__playwright-mcp__playwright_navigate({ url: "http://app.test/" })
-# headless: true は ~/.claude/CLAUDE.md でデフォルト設定済み
+mcp__playwright-mcp__playwright_navigate({ url: "http://app.test/", headless: true })
 ```
+
+**重要**: 必ず `headless: true` を指定すること。
 
 ### 入力
 
@@ -220,9 +221,87 @@ mcp__playwright-mcp__playwright_close()
 
 ---
 
-## Unit / Feature テスト
+## Unit / Feature テスト実行フロー
 
-Unit / Feature テストは従来通り Pest PHP で実行:
+<unit-feature-test-flow>
+  <principle>
+    test/unit または test/feature の spec を取得し、テストコードを作成・実行。
+    **テストがパスするまで修正を繰り返す。**
+    **AskUserQuestion は使用しない。必要な情報は全て spec に含まれている。**
+  </principle>
+
+  <step name="1-get-spec">
+    <action>test spec を取得</action>
+    <command>sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"</command>
+    <extract>type (unit/feature), depends_on, target, scenarios</extract>
+  </step>
+
+  <step name="2-get-target-spec">
+    <action>depends_on からテスト対象の spec を取得</action>
+    <note>Model構造やComponent構造を把握するため</note>
+  </step>
+
+  <step name="3-create-test">
+    <action>spec.scenarios からテストコードを生成</action>
+    <output-unit>tests/Unit/{path}/{Name}Test.php</output-unit>
+    <output-feature>tests/Feature/Livewire/{Component}Test.php</output-feature>
+  </step>
+
+  <step name="4-run-test">
+    <action>テストを実行</action>
+    <command-unit>php artisan test tests/Unit/{path}/{Name}Test.php</command-unit>
+    <command-feature>php artisan test tests/Feature/Livewire/{Component}Test.php</command-feature>
+    <on-failure>テストコードまたは実装を修正して再実行</on-failure>
+  </step>
+
+  <step name="5-report">
+    <action>テスト結果を報告（親agentへ返す）</action>
+    <content>
+      - テスト件数、成功/失敗
+      - 失敗時: エラー詳細と修正内容
+      - 作成/修正したファイル一覧
+    </content>
+  </step>
+</unit-feature-test-flow>
+
+---
+
+### Unit テストテンプレート
+
+```php
+// tests/Unit/Models/{Model}Test.php
+use App\Models\{Model};
+
+test('can create {model}', function () {
+    $model = {Model}::create([...]);
+    expect($model)->toBeInstanceOf({Model}::class);
+});
+
+test('{scenario.description}', function () {
+    // scenario.steps から実装
+});
+```
+
+### Feature テストテンプレート
+
+```php
+// tests/Feature/Livewire/{Component}Test.php
+use Livewire\Livewire;
+
+test('can render component', function () {
+    Livewire::test({Component}::class)
+        ->assertStatus(200);
+});
+
+test('{scenario.description}', function () {
+    Livewire::test({Component}::class)
+        ->set('field', 'value')
+        ->call('method')
+        ->assertHasNoErrors();
+});
+```
+
+### 実行コマンド
 
 ```bash
 # Unit テスト
@@ -230,17 +309,9 @@ php artisan test tests/Unit/{path}/{Name}Test.php
 
 # Feature テスト
 php artisan test tests/Feature/Livewire/{Component}Test.php
-```
 
-### Feature テストテンプレート
-
-```php
-use Livewire\Livewire;
-
-test('{scenario.description}', function () {
-    Livewire::test({target.component}::class)
-        ->assertStatus(200);
-});
+# 全テスト
+php artisan test
 ```
 
 ---
