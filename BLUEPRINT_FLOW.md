@@ -205,6 +205,7 @@ Tailwind CSS 4
 daisyUI 5
 Alpine.js 3
 PHP 8.3+
+MySQL 8.0+
 ```
 
 ### 共通設計方針

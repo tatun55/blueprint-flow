@@ -68,6 +68,7 @@ action-agentとして実行: spec_id={id}
 ```
 Laravel 12
 PHP 8.3+
+MySQL 8.0+
 ```
 
 ## 出力物
