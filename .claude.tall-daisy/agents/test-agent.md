@@ -58,7 +58,22 @@ lsof -i :5173 > /dev/null 2>&1 || (npm run dev &; sleep 3)
     <action>テーブルspecからシーダーデータを確認</action>
     <command>./scripts/blueprint-db-cli.sh get data tables {table-slug}</command>
     <extract>seeders.dev（テスト時に存在するデータを把握）</extract>
-    <note>シーダーデータを前提にテストを設計可能</note>
+  </step>
+
+  <step name="1c-propose-seeder-additions">
+    <condition>テスト設計に必要なデータが seeders.dev に不足している場合</condition>
+    <action>AskUserQuestion でシーダー追加を提案</action>
+    <example>
+      「完了状態のタスク表示をテストするため、以下のデータ追加を提案します:
+      - {"title": "完了済みタスク", "completed": true}
+      追加してよろしいですか？」
+    </example>
+    <on-approve>
+      <action>spec の seeders.dev を更新</action>
+      <command>./scripts/blueprint-db-cli.sh update {spec_id} '{updated_json}'</command>
+      <action>Seeder ファイルを再生成</action>
+      <note>人間も同じデータでテスト可能になる</note>
+    </on-approve>
   </step>
 
   <step name="2-design-cases">

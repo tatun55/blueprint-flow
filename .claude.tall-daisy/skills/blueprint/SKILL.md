@@ -361,9 +361,26 @@ ui/pages (tables, actions に依存可能)
 
 #### シーダー定義ルール
 
-- `dev`: 開発・手動テスト用（3-5件）
+**目的**: 開発・手動テスト・E2Eテストすべてで使用する単一データソース
+
+- `dev`: 開発・テスト・確認すべてに使える包括的データ
 - 各テーブルに必ず `seeders.dev` を含める
-- 実装時にSeederファイルを自動生成可能にする
+- **各レコードの役割をコメントで明示**（テスト設計の意図が分かるように）
+
+```json
+{
+  "seeders": {
+    "dev": [
+      {"_comment": "基本状態（一覧表示テスト用）", "title": "買い物に行く", "completed": false},
+      {"_comment": "完了状態（完了表示テスト用）", "title": "レポートを書く", "completed": true},
+      {"_comment": "長いタイトル（レイアウト確認用）", "title": "これは非常に長いタスク名でレイアウトが崩れないか確認", "completed": false},
+      {"_comment": "最小データ（エッジケース）", "title": "a", "completed": false}
+    ]
+  }
+}
+```
+
+**重要**: 人間もE2Eも同じ `php artisan migrate:fresh --seed` で同じデータを使用
 
 ### ui/pages テンプレート
 

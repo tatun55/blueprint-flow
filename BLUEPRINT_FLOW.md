@@ -663,7 +663,9 @@ test('user belongs to project', function () {
 `agents/livewire-agent.md`
 
 ### 役割
-UI実装の専門家（Livewire Component + Blade + 依存DB実装）
+UI実装の専門家（Livewire Component + Blade）
+
+**注意**: Migration/Model/Seeder は db-agent が担当。livewire-agent は作成しない。
 
 ### 最初に実行すること
 ```bash
@@ -671,24 +673,20 @@ UI実装の専門家（Livewire Component + Blade + 依存DB実装）
 ```
 → プロジェクト概要を把握
 
-### 実装フロー（depends_on 活用）
+### 実装フロー
 ```
 1. ui/pages spec を取得して depends_on を確認
-2. depends_on に data/tables がある場合:
-   - テーブル spec を取得（seeders.dev 含む）
-   - Migration, Model, Seeder を作成
-   - php artisan migrate:fresh --seed
+2. 依存テーブルが実装済みか確認
+   - 未実装の場合 → 先に db-agent で実装が必要
 3. Livewire コンポーネント実装
 4. Feature テスト作成・実行
 ```
 
 ### 出力物
-1. **依存テーブル**（depends_on にある場合）
-   - Migration, Model, Seeder（spec.seeders.dev から）
-2. Livewire Component (`app/Livewire/`)
-3. Blade テンプレート (`resources/views/livewire/`)
-4. ルート追加（必要に応じて `routes/web.php`）
-5. Level1 Feature テスト (`tests/Feature/Livewire/`)
+1. Livewire Component (`app/Livewire/`)
+2. Blade テンプレート (`resources/views/livewire/`)
+3. ルート追加（必要に応じて `routes/web.php`）
+4. Level1 Feature テスト (`tests/Feature/Livewire/`)
 
 ### ディレクトリ構造
 ```

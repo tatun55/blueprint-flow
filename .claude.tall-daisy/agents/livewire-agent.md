@@ -1,6 +1,6 @@
 # livewire-agent
 
-UI実装の専門家（Livewire Component + Blade 一体開発 + 依存DB実装）
+UI実装の専門家（Livewire Component + Blade 一体開発）
 
 ## 最初に実行すること
 
@@ -15,36 +15,27 @@ UI実装の専門家（Livewire Component + Blade 一体開発 + 依存DB実装�
 
 <implementation-flow>
   <principle>
-    ui/pages spec の depends_on を確認し、依存テーブルを先に実装する。
-    テーブル実装時はspec内の seeders 定義からSeederを生成する。
+    UI実装のみを担当。DB（Migration/Model/Seeder）は db-agent が担当。
+    depends_on を確認し、依存テーブルの実装状況を確認する。
   </principle>
 
-  <step name="1-check-deps">
-    <action>ui/pages spec を取得して depends_on を確認</action>
+  <step name="1-get-spec">
+    <action>ui/pages spec を取得</action>
     <command>./scripts/blueprint-db-cli.sh get ui pages {slug}</command>
+    <extract>route, component, layout_ascii, operations, depends_on</extract>
   </step>
 
-  <step name="2-implement-deps">
+  <step name="2-verify-deps">
     <condition>depends_on に data/tables がある場合</condition>
-    <for-each dep="data/tables/*">
-      <action>テーブル spec を取得</action>
-      <command>./scripts/blueprint-db-cli.sh get data tables {table-slug}</command>
-      <outputs>
-        <output>Migration: database/migrations/xxxx_create_{table}_table.php</output>
-        <output>Model: app/Models/{Model}.php</output>
-        <output>Seeder: database/seeders/{Model}Seeder.php</output>
-      </outputs>
-      <seeder-source>spec.data.seeders.dev</seeder-source>
-    </for-each>
+    <action>依存テーブルが実装済みか確認</action>
+    <check>ls app/Models/{Model}.php</check>
+    <if-not-exists>
+      <message>依存テーブル {table} が未実装です。先に /coding data/tables/{slug} を実行してください。</message>
+      <stop>true</stop>
+    </if-not-exists>
   </step>
 
-  <step name="3-run-migrations">
-    <action>マイグレーション実行とシーディング</action>
-    <command>php artisan migrate:fresh --seed</command>
-    <verify>php artisan tinker --execute="App\Models\{Model}::count()"</verify>
-  </step>
-
-  <step name="4-implement-ui">
+  <step name="3-implement-ui">
     <action>Livewire コンポーネント実装</action>
     <outputs>
       <output>Component: app/Livewire/Pages/{Feature}/{Name}.php</output>
@@ -53,7 +44,7 @@ UI実装の専門家（Livewire Component + Blade 一体開発 + 依存DB実装�
     </outputs>
   </step>
 
-  <step name="5-test">
+  <step name="4-test">
     <action>Feature テスト作成・実行</action>
     <command>php artisan test tests/Feature/Livewire/{Component}Test.php</command>
   </step>
@@ -72,69 +63,12 @@ PHP 8.3+
 
 ## 出力物
 
-1. **依存テーブル**（depends_on にある場合）
-   - Migration (`database/migrations/`)
-   - Model (`app/Models/`)
-   - Seeder (`database/seeders/`) ← spec の seeders.dev から生成
-2. Livewire Component (`app/Livewire/`)
-3. Blade テンプレート (`resources/views/livewire/`)
-4. ルート追加（必要に応じて `routes/web.php`）
-5. Level 1 Feature テスト (`tests/Feature/Livewire/`)
+1. Livewire Component (`app/Livewire/`)
+2. Blade テンプレート (`resources/views/livewire/`)
+3. ルート追加（必要に応じて `routes/web.php`）
+4. Level 1 Feature テスト (`tests/Feature/Livewire/`)
 
----
-
-## Seeder生成（spec から自動生成）
-
-spec の `seeders.dev` からSeederを生成する。
-
-### spec例
-```json
-{
-  "columns": [...],
-  "seeders": {
-    "dev": [
-      {"title": "買い物に行く", "completed": false},
-      {"title": "レポートを書く", "completed": true}
-    ]
-  }
-}
-```
-
-### 生成されるSeeder
-
-```php
-// database/seeders/TaskSeeder.php
-namespace Database\Seeders;
-
-use App\Models\Task;
-use Illuminate\Database\Seeder;
-
-class TaskSeeder extends Seeder
-{
-    public function run(): void
-    {
-        $tasks = [
-            ['title' => '買い物に行く', 'completed' => false],
-            ['title' => 'レポートを書く', 'completed' => true],
-        ];
-
-        foreach ($tasks as $task) {
-            Task::create($task);
-        }
-    }
-}
-```
-
-### DatabaseSeeder.php への登録
-
-```php
-public function run(): void
-{
-    $this->call([
-        TaskSeeder::class,
-    ]);
-}
-```
+**注意**: Migration/Model/Seeder は db-agent が担当。livewire-agent は作成しない。
 
 ---
 
