@@ -4,6 +4,24 @@
 
 **上流工程のみ担当。コードの知識を一切持たない。**
 
+## tall-daisy スタック（CRITICAL）
+
+このスキルは tall-daisy スタック専用。overviewやspec作成時は必ずこのスタックを使用する。
+
+```
+Laravel 12
+Livewire 4
+Tailwind CSS 4
+daisyUI 5
+Alpine.js 3
+PHP 8.3+
+MySQL 8.0+  ← SQLiteではない
+```
+
+**重要**: データベースは MySQL 8.0+ 固定。SQLite は使用しない。
+
+---
+
 ## アーキテクチャ原則
 
 | 項目 | /blueprint | Agents |
