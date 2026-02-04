@@ -50,7 +50,15 @@ lsof -i :5173 > /dev/null 2>&1 || (npm run dev &; sleep 3)
   <step name="1-analyze-spec">
     <action>対象specを取得</action>
     <command>./scripts/blueprint-db-cli.sh get ui pages {slug}</command>
-    <extract>operations, route, layout_ascii</extract>
+    <extract>operations, route, layout_ascii, depends_on</extract>
+  </step>
+
+  <step name="1b-check-seeder-data">
+    <condition>depends_on に data/tables がある場合</condition>
+    <action>テーブルspecからシーダーデータを確認</action>
+    <command>./scripts/blueprint-db-cli.sh get data tables {table-slug}</command>
+    <extract>seeders.dev（テスト時に存在するデータを把握）</extract>
+    <note>シーダーデータを前提にテストを設計可能</note>
   </step>
 
   <step name="2-design-cases">

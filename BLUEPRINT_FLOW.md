@@ -5,13 +5,15 @@
 ## 全体構成
 
 ```
-Skills (4つ)               Agents (4つ)
+Skills (3つ)               Agents (4つ)
 ────────────────────       ────────────────────
-/blueprint → 仕様策定      db-agent       → DB設計・実装
-/db        → DB設計        livewire-agent → UI実装
-/coding    → 実装          action-agent   → バックエンド
-/test      → テスト        test-agent     → E2Eテスト
+/blueprint → 仕様策定      db-agent       → DB実装
+/coding    → 実装          livewire-agent → UI実装（+依存DB）
+/e2e       → E2Eテスト     action-agent   → バックエンド
+                           test-agent     → E2Eテスト
 ```
+
+**注意**: DB設計は `/blueprint` が担当（仕様の一部として管理）
 
 ---
 
@@ -232,9 +234,11 @@ CREATE TABLE tasks (
 | Category | Types | 説明 |
 |----------|-------|------|
 | core | overview, const | プロジェクト概要、定数定義 |
-| data | tables, seeders | DB設計、シードデータ |
+| data | tables | DB設計（seeders定義を含む） |
 | ui | pages, partials, layouts | 画面、パーツ、レイアウト |
 | action | sync, async, scheduled | Action, Job, Command |
+
+**depends_on**: 各specは他specへの依存を明示可能（ui→data、action→data）
 
 ### e2e.db（E2Eテスト管理）
 
@@ -365,47 +369,7 @@ draft → pending_review → approved → in_progress → impl_review → testin
 
 ---
 
-## Skill 2: `/db`
-
-### ファイル
-`skills/db/SKILL.md`
-
-### 目的
-DB設計・変更の指示とdb-agentの起動
-
-### 入力
-| パターン | 動作 |
-|----------|------|
-| `/db` | 現在のDB状態を確認し、何をするかAskUserQuestionで確認 |
-| `/db <指示>` | 指示をdb-agentに渡して実行 |
-
-### 振る舞いフロー
-
-#### 引数なしの場合
-```
-1. ls database/migrations/ で既存マイグレーション確認
-2. ./scripts/blueprint-db-cli.sh list data tables で関連spec確認
-3. AskUserQuestion で何をしたいか確認:
-   - 「新しいテーブルを追加」
-   - 「既存テーブルにカラム追加」
-   - 「リレーション変更」
-   - 「Seeder更新」
-4. 選択に応じて詳細をヒアリング
-5. db-agent を Task tool で起動
-```
-
-#### 引数ありの場合
-```
-1. $ARGUMENTS をそのまま db-agent に渡す
-2. Task tool で db-agent を起動
-```
-
-### 呼び出すAgent
-`db-agent`
-
----
-
-## Skill 3: `/coding`
+## Skill 2: `/coding`
 
 ### ファイル
 `skills/coding/SKILL.md`
@@ -442,24 +406,24 @@ DB設計・変更の指示とdb-agentの起動
 ```
 
 ### 呼び出すAgent
-- `livewire-agent` - UI実装
+- `livewire-agent` - UI実装（依存テーブルも実装）
 - `action-agent` - バックエンド実装
 
 ---
 
-## Skill 4: `/test`
+## Skill 3: `/e2e`
 
 ### ファイル
-`skills/test/SKILL.md`
+`skills/e2e/SKILL.md`
 
 ### 目的
-テスト実行（E2E + Unit/Feature）
+E2Eテスト設計・コード作成・実行
 
 ### 入力
 | パターン | 動作 |
 |----------|------|
-| `/test` | e2e.dbを確認し、テスト状況を分析して推奨を提示 |
-| `/test <指示>` | 指示に基づいてテストを実行 |
+| `/e2e` | e2e.dbを確認し、テスト状況を分析して推奨を提示 |
+| `/e2e <指示>` | 指示に基づいてテストを設計・実行 |
 
 ### 使用するCLIコマンド
 ```bash
@@ -478,21 +442,26 @@ php artisan test --filter=<name>        # 特定テスト
 1. ./scripts/e2e-db-cli.sh overview でE2Eテスト状況取得
 2. ./scripts/e2e-db-cli.sh attention で要対応テスト確認
 3. 分析してAskUserQuestionで提示:
-   - 「未実行のE2Eテストが N件あります。実行しますか？」
-   - 「失敗したテストが N件あります。再実行しますか？」
-   - 「Unit/Featureテストを実行しますか？」
-4. 選択に応じて実行:
-   - E2E → test-agent を起動
-   - Unit → php artisan test を実行
+   - 「新しいE2Eテストを作成」→ spec選択 → テストコード作成
+   - 「既存テストを実行」→ npx playwright test
+   - 「失敗テストを再実行」
+4. test-agent を起動
 ```
 
 #### 引数ありの場合
 ```
-$ARGUMENTS を柔軟に解釈して適切なテストを実行
+$ARGUMENTS を解釈して適切なアクションを実行
 ```
 
+### 出力物（CRITICAL）
+- テストコード: `tests/e2e/specs/{page-slug}.spec.ts`
+- e2e.db登録: シナリオ定義
+- テスト実行結果: e2e.dbに記録
+
+**テストコードなしでE2Eテスト完了としてはならない**
+
 ### 呼び出すAgent
-`test-agent` (E2Eのみ)
+`test-agent`
 
 ---
 
@@ -502,20 +471,30 @@ $ARGUMENTS を柔軟に解釈して適切なテストを実行
 `agents/db-agent.md`
 
 ### 役割
-DB設計・実装の専門家（Migration, Model, Seeder, Factory）
+DB実装の専門家（Migration, Model, Seeder）
 
 ### 最初に実行すること
 ```bash
 ./scripts/blueprint-db-cli.sh get core overview main
+./scripts/blueprint-db-cli.sh list data tables
 ```
-→ プロジェクト概要を把握
+→ プロジェクト概要とテーブル一覧を把握
+
+### 実装フロー
+```
+1. テーブル spec を取得（seeders.dev 含む）
+2. Migration 作成（spec.columns から）
+3. Model 作成（spec.relations から）
+4. Seeder 作成（spec.seeders.dev から）
+5. php artisan migrate:fresh --seed
+6. 結果確認
+```
 
 ### 出力物
 1. Migration ファイル (`database/migrations/`)
 2. Model ファイル (`app/Models/`)
-3. Seeder ファイル (`database/seeders/Tables/`)
-4. Factory ファイル (`database/factories/`)
-5. Level1 Unit テスト (`tests/Unit/Models/`)
+3. Seeder ファイル (`database/seeders/`) ← spec の seeders.dev から生成
+4. Level1 Unit テスト (`tests/Unit/Models/`)
 
 ### 埋め込む専門知識
 
@@ -684,7 +663,7 @@ test('user belongs to project', function () {
 `agents/livewire-agent.md`
 
 ### 役割
-UI実装の専門家（Livewire Component + Blade 一体開発）
+UI実装の専門家（Livewire Component + Blade + 依存DB実装）
 
 ### 最初に実行すること
 ```bash
@@ -692,11 +671,24 @@ UI実装の専門家（Livewire Component + Blade 一体開発）
 ```
 → プロジェクト概要を把握
 
+### 実装フロー（depends_on 活用）
+```
+1. ui/pages spec を取得して depends_on を確認
+2. depends_on に data/tables がある場合:
+   - テーブル spec を取得（seeders.dev 含む）
+   - Migration, Model, Seeder を作成
+   - php artisan migrate:fresh --seed
+3. Livewire コンポーネント実装
+4. Feature テスト作成・実行
+```
+
 ### 出力物
-1. Livewire Component (`app/Livewire/`)
-2. Blade テンプレート (`resources/views/livewire/`)
-3. ルート追加（必要に応じて `routes/web.php`）
-4. Level1 Feature テスト (`tests/Feature/Livewire/`)
+1. **依存テーブル**（depends_on にある場合）
+   - Migration, Model, Seeder（spec.seeders.dev から）
+2. Livewire Component (`app/Livewire/`)
+3. Blade テンプレート (`resources/views/livewire/`)
+4. ルート追加（必要に応じて `routes/web.php`）
+5. Level1 Feature テスト (`tests/Feature/Livewire/`)
 
 ### ディレクトリ構造
 ```
@@ -924,6 +916,15 @@ test('can create user', function () {
 ```
 → プロジェクト概要を把握
 
+### 実装フロー（depends_on 活用）
+```
+1. action spec を取得して depends_on を確認
+2. depends_on に data/tables がある場合:
+   - テーブル spec を取得してModel構造を把握
+3. Action/Job/Command クラスを実装
+4. Unit テスト作成・実行
+```
+
 ### 出力物
 1. Action クラス (`app/Actions/`)
 2. Job クラス (`app/Jobs/`)
@@ -1082,24 +1083,39 @@ test('CreateUser action creates user and dispatches event', function () {
 `agents/test-agent.md`
 
 ### 役割
-E2Eテスト設計・実行の専門家
+E2Eテスト設計・コード作成・実行の専門家
 
-### 重要な制約
-- **コードを読まない**（仕様ベースでテスト設計）
-- 実装の詳細に依存しない
+### 重要な原則
+- **再現可能なテストコードを作成する**（手動操作ではなく自動化）
+- 仕様ベースでテスト設計（ui/pages spec の operations を参照）
 - ユーザー視点でテスト
 
 ### 最初に実行すること
 ```bash
+APP_URL=$(grep APP_URL .env | cut -d '=' -f2)
+lsof -i :5173 > /dev/null 2>&1 || (npm run dev &; sleep 3)
 ./scripts/blueprint-db-cli.sh get core overview main
 ./scripts/e2e-db-cli.sh overview
 ```
-→ プロジェクト概要とE2Eテスト状況を把握
+→ 環境確認、プロジェクト概要とE2Eテスト状況を把握
 
-### 出力物
-1. E2E テストケース（e2e.dbに登録）
-2. テスト実行結果レポート
-3. スクリーンショット (`tests/e2e/screenshots/`)
+### E2Eテスト作成フロー（depends_on 活用）
+```
+1. ui/pages spec を取得（operations, depends_on 含む）
+2. depends_on からテスト対象のデータ構造を把握
+3. operationsごとにテストケース設計
+4. テストコード作成: tests/e2e/specs/{page-slug}.spec.ts
+5. テスト実行: npx playwright test
+6. 結果を e2e.db に記録
+```
+
+### 出力物（CRITICAL）
+1. **テストコード**: `tests/e2e/specs/{page-slug}.spec.ts`
+2. e2e.db登録: シナリオ定義
+3. テスト実行結果
+4. スクリーンショット (`tests/e2e/screenshots/`)
+
+**テストコードなしでE2Eテスト完了としてはならない**
 
 ### 使用するCLIコマンド
 ```bash
