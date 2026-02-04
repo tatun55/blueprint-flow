@@ -3,15 +3,20 @@
 # Usage: ./scripts/init.sh [stack] [target_dir]
 #
 # Stack defaults to "tall-daisy"
+# Can be called from either:
+#   - $BPF_HOME/scripts/init.sh (symlink mode)
+#   - .blueprint-flow/scripts/init.sh (submodule mode)
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BLUEPRINT_FLOW_DIR="$(dirname "$SCRIPT_DIR")"
+# Resolve symlinks to get actual blueprint-flow directory
+BLUEPRINT_FLOW_DIR="$(cd "$(dirname "$SCRIPT_DIR")" && pwd -P)"
 STACK="${1:-tall-daisy}"
 TARGET_DIR="${2:-.}"
 
 echo "Initializing blueprint-flow with stack: $STACK"
+echo "Blueprint-flow location: $BLUEPRINT_FLOW_DIR"
 
 # Validate stack exists
 STACK_DIR="$BLUEPRINT_FLOW_DIR/.claude.$STACK"

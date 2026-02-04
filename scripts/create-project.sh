@@ -176,15 +176,36 @@ else
 fi
 
 # ============================================
-# Step 7: Add Blueprint Flow
+# Step 7: Add Blueprint Flow (Symlink to ~/.blueprint-flow)
 # ============================================
 log_info "Step 7: Adding blueprint-flow..."
 
-git submodule add "$BLUEPRINT_REPO" .blueprint-flow
-log_success "blueprint-flow submodule added"
+# Use symlink to ~/.blueprint-flow for always-latest behavior
+BPF_HOME="${BPF_HOME:-$HOME/.blueprint-flow}"
+
+if [[ ! -d "$BPF_HOME" ]]; then
+    log_info "Cloning blueprint-flow to $BPF_HOME..."
+    git clone "$BLUEPRINT_REPO" "$BPF_HOME" --quiet
+    log_success "blueprint-flow cloned to $BPF_HOME"
+else
+    log_info "Using existing blueprint-flow at $BPF_HOME"
+    # Pull latest
+    (cd "$BPF_HOME" && git pull origin main --quiet 2>/dev/null || true)
+    log_success "blueprint-flow updated to latest"
+fi
+
+# Create symlink
+ln -sf "$BPF_HOME" .blueprint-flow
+log_success "blueprint-flow symlinked: .blueprint-flow -> $BPF_HOME"
+
+# Add .blueprint-flow to .gitignore (symlinks shouldn't be committed)
+if ! grep -q "^\.blueprint-flow$" .gitignore 2>/dev/null; then
+    echo ".blueprint-flow" >> .gitignore
+    log_success "Added .blueprint-flow to .gitignore"
+fi
 
 # Initialize with stack
-./.blueprint-flow/scripts/init.sh "$STACK"
+"$BPF_HOME/scripts/init.sh" "$STACK"
 log_success "blueprint-flow initialized with $STACK stack"
 
 # Commit blueprint-flow setup
