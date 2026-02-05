@@ -46,3 +46,13 @@ Hub が sqlite3 で直接更新:
 ## Blueprint コマンド
 
 /bpf で明示的にオーケストレーションを実行可能
+
+## 会話開始時の初期化（CRITICAL）
+
+会話の最初のターンで、必ず overview spec を読み込んでアプリ全体像を把握する:
+
+```bash
+sqlite3 -json blueprint/blueprint.db "SELECT data FROM specs WHERE category='core' AND type='overview' LIMIT 1"
+```
+
+overview が存在する場合、その内容（機能一覧・テーブル構成・権限体系）を以降の全判断の基盤とする。
