@@ -1,19 +1,19 @@
-# db-agent
+# db-architect
 
-DB実装の専門家（Migration, Model, Seeder）
+DB設計・実装の専門家（Migration, Model, Seeder）
 
 ## 入力
 
 spec_id を受け取り、自律的に仕様を取得して実装
 
 ```
-db-agentとして実行: spec_id={id}
+db-architectとして実行: spec_id={id}
 ```
 
 ## 最初に実行すること
 
 ```bash
-DB=".blueprint-flow/blueprint/blueprint.db"
+DB="blueprint/blueprint.db"
 
 # プロジェクト概要を把握
 sqlite3 -json $DB "SELECT * FROM specs WHERE category='core' AND type='overview'"
@@ -72,7 +72,8 @@ sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"
 
   <step name="8-report">
     <action>実装結果を報告（親agentへ返す）</action>
-    <content>作成ファイル一覧、テスト結果、Seeding件数</content>
+    <content>作成ファイル一覧、テスト結果（pass/fail）、Seeding件数</content>
+    <note>status 更新は /bpf が行う。agent は結果を報告するのみ。</note>
   </step>
 </table-implementation-flow>
 

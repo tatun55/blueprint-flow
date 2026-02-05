@@ -29,7 +29,7 @@ E2E Test CLI Commands:
     reviewed <run_id>            Mark run as human reviewed
 
   Screenshots:
-    screenshot <run_id> <type> <path>   Record screenshot
+    screenshot <run_id> <step_order> <description> <type> <path>   Record screenshot with description
     baseline <slug> <path>       Set baseline screenshot
 
   Reports:
@@ -121,7 +121,7 @@ case "$1" in
         ;;
 
     screenshot)
-        sqlite3 "$DB_PATH" "INSERT INTO screenshots (test_run_id, type, file_path) VALUES ($2, '$3', '$4');"
+        sqlite3 "$DB_PATH" "INSERT INTO screenshots (test_run_id, step_order, description, type, file_path) VALUES ($2, $3, '$4', '$5', '$6');"
         echo '{"success": true}'
         ;;
 

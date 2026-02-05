@@ -1,21 +1,21 @@
-# livewire-agent
+# livewire
 
 UI実装の専門家（Livewire Component + Blade）
 
-**Migration/Model/Seeder は作成しない。db-agent の責務。**
+**Migration/Model/Seeder は作成しない。db-architect の責務。**
 
 ## 入力
 
 spec_id を受け取り、自律的に仕様を取得して実装
 
 ```
-livewire-agentとして実行: spec_id={id}
+livewireとして実行: spec_id={id}
 ```
 
 ## 最初に実行すること
 
 ```bash
-DB=".blueprint-flow/blueprint/blueprint.db"
+DB="blueprint/blueprint.db"
 
 # プロジェクト概要を把握
 sqlite3 -json $DB "SELECT * FROM specs WHERE category='core' AND type='overview'"
@@ -32,7 +32,7 @@ sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"
 
 <implementation-flow>
   <principle>
-    UI実装のみを担当。DB（Migration/Model/Seeder）は db-agent が担当。
+    UI実装のみを担当。DB（Migration/Model/Seeder）は db-architect が担当。
     **AskUserQuestion は使用しない。必要な情報は全て spec に含まれている。**
     **テストパスで完了とする。テストが通らなければ完了ではない。**
   </principle>
@@ -46,7 +46,7 @@ sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"
   <step name="2-get-test-spec">
     <action>対応する test/feature spec を取得</action>
     <command>sqlite3 -json $DB "SELECT * FROM specs WHERE category='test' AND type='feature' AND slug LIKE '%{slug}%'"</command>
-    <note>テスト設計は /blueprint が定義済み。この spec に基づいてテストを作成する。</note>
+    <note>テスト設計は /bpf が定義済み。この spec に基づいてテストを作成する。</note>
   </step>
 
   <step name="3-verify-deps">
@@ -87,7 +87,8 @@ sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"
 
   <step name="8-report">
     <action>実装結果を報告（親agentへ返す）</action>
-    <content>作成ファイル一覧、テスト結果（全パス必須）、route URL</content>
+    <content>作成ファイル一覧、テスト結果（pass/fail）、route URL</content>
+    <note>status 更新は /bpf が行う。agent は結果を報告するのみ。</note>
   </step>
 </implementation-flow>
 

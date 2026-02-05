@@ -50,6 +50,8 @@ CREATE TABLE IF NOT EXISTS test_runs (
 CREATE TABLE IF NOT EXISTS screenshots (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     test_run_id INTEGER NOT NULL,
+    step_order INTEGER NOT NULL DEFAULT 0,
+    description TEXT NOT NULL DEFAULT '',
     type TEXT NOT NULL CHECK(type IN ('baseline', 'actual', 'diff')),
     file_path TEXT NOT NULL,
     width INTEGER,

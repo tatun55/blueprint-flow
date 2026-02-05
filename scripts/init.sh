@@ -34,15 +34,21 @@ else
     RELATIVE_BPF=".blueprint-flow"
 fi
 
-# Create .claude symlink
-echo "Creating .claude symlink..."
+# Create .claude directory with internal symlinks
+# (real directory required for Claude Code to read settings.json/hooks)
+echo "Creating .claude directory..."
 if [[ -L "$TARGET_DIR/.claude" ]]; then
     rm "$TARGET_DIR/.claude"
 elif [[ -d "$TARGET_DIR/.claude" ]]; then
     echo "Warning: .claude directory exists, backing up to .claude.bak"
     mv "$TARGET_DIR/.claude" "$TARGET_DIR/.claude.bak"
 fi
-ln -sf "$RELATIVE_BPF/.claude.$STACK" "$TARGET_DIR/.claude"
+mkdir -p "$TARGET_DIR/.claude"
+ln -sf "../$RELATIVE_BPF/.claude.$STACK/skills" "$TARGET_DIR/.claude/skills"
+ln -sf "../$RELATIVE_BPF/.claude.$STACK/agents" "$TARGET_DIR/.claude/agents"
+ln -sf "../$RELATIVE_BPF/.claude.$STACK/hooks" "$TARGET_DIR/.claude/hooks"
+ln -sf "../$RELATIVE_BPF/.claude.$STACK/CLAUDE.md" "$TARGET_DIR/.claude/CLAUDE.md"
+ln -sf "../$RELATIVE_BPF/.claude.$STACK/settings.json" "$TARGET_DIR/.claude/settings.json"
 
 # Create project directories
 echo "Creating project directories..."
@@ -77,20 +83,14 @@ if [[ ! -f "$TARGET_DIR/CLAUDE.md" ]]; then
 
 ## Blueprint Flow
 
-This project uses blueprint-flow for development workflow.
+このプロジェクトは blueprint-flow を使用。
+核心ルールは `.claude/CLAUDE.md` に定義済み（常時適用）。
 
-- Skills: .claude/skills/
-- Agents: .claude/agents/
-
-## Quick Commands
-
-```bash
-/blueprint     # Spec management & development orchestration
-```
+/bpf でオーケストレーションを実行可能。
 
 ## Project-Specific Rules
 
-(Add project-specific rules here)
+(プロジェクト固有ルールをここに追加)
 CLAUDE_EOF
 fi
 
@@ -104,8 +104,8 @@ echo ""
 echo "Stack: $STACK"
 echo "Version: $(cat "$TARGET_DIR/.blueprint-flow-version" | head -c 7)"
 echo ""
-echo ".claude -> .blueprint-flow/.claude.$STACK (symlink)"
+echo ".claude/ -> .blueprint-flow/.claude.$STACK/* (internal symlinks)"
 echo ""
 echo "Next steps:"
 echo "  1. Review/update CLAUDE.md with project-specific rules"
-echo "  2. Run /blueprint to start development"
+echo "  2. Run /bpf to start development"

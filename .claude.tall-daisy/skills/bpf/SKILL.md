@@ -4,6 +4,8 @@
 
 **上流工程のみ担当。コードの知識を一切持たない。**
 
+---
+
 ## tall-daisy スタック（CRITICAL）
 
 このスキルは tall-daisy スタック専用。overviewやspec作成時は必ずこのスタックを使用する。
@@ -29,7 +31,6 @@ MySQL 8.0+  ← SQLiteではない
 ```bash
 # APP_URL でアクセス可能（.env で定義）
 APP_URL=$(grep APP_URL .env | cut -d '=' -f2)
-# 例: http://my-todo-app.pizza
 ```
 
 **重要**:
@@ -48,20 +49,9 @@ Vite が起動していないと CSS/JS が読み込まれない。
 
 ---
 
-## アーキテクチャ原則
-
-| 項目 | /blueprint | Agents |
-|------|-----------|--------|
-| 役割 | 上流工程（仕様・設計） | 下流工程（実装・テスト） |
-| コード知識 | なし | あり |
-| ユーザー対話 | AskUserQuestion | なし |
-| 実行モード | Foreground | Background（並列） |
-
----
-
 ## サブコマンド
 
-### `/blueprint pull`
+### `/bpf pull`
 
 blueprint-flowサブモジュールを最新版に更新する。
 
@@ -70,7 +60,7 @@ cd .blueprint-flow && git pull origin main && cd ..
 ./.blueprint-flow/scripts/update.sh
 ```
 
-### `/blueprint push`
+### `/bpf push`
 
 blueprint-flowサブモジュールへの変更をリモートにpushする。
 
@@ -87,7 +77,7 @@ git add .blueprint-flow && git commit -m "Update blueprint-flow submodule"
 
 1. プロジェクト状況を確認
 ```bash
-DB=".blueprint-flow/blueprint/blueprint.db"
+DB="blueprint/blueprint.db"
 sqlite3 -json $DB "SELECT id, category, type, slug, name, status, human_reviewed FROM specs ORDER BY id"
 sqlite3 -json $DB "SELECT * FROM progress_summary"
 ```
@@ -123,65 +113,7 @@ Types:
   - test: unit, feature, e2e (level 1-3)
 ```
 
-### Test Spec 構造（タイプ別）
-
-#### test/unit（Action/Job/Command用）
-
-```json
-{
-  "level": 1,
-  "depends_on": ["action/sync/create-task"],
-  "target": {
-    "type": "action",
-    "class": "App\\Actions\\CreateTask"
-  },
-  "scenarios": [
-    {
-      "name": "success",
-      "description": "正常に実行できる",
-      "input": {"title": "新しいタスク"},
-      "assertions": ["Taskが作成される", "イベントが発火される"]
-    },
-    {
-      "name": "validation-error",
-      "description": "バリデーションエラー",
-      "input": {"title": ""},
-      "assertions": ["例外がスローされる"]
-    }
-  ]
-}
-```
-
-#### test/feature（Livewire Component用）
-
-```json
-{
-  "level": 1,
-  "depends_on": ["ui/pages/todo-index"],
-  "target": {
-    "type": "component",
-    "class": "App\\Livewire\\Pages\\Todo\\Index"
-  },
-  "scenarios": [
-    {
-      "name": "render",
-      "description": "コンポーネントが表示される",
-      "assertions": ["status 200", "タイトルが表示される"]
-    },
-    {
-      "name": "add-task",
-      "description": "タスクを追加できる",
-      "livewire_actions": [
-        {"set": {"title": "新しいタスク"}},
-        {"call": "save"}
-      ],
-      "assertions": ["エラーなし", "DBに保存される"]
-    }
-  ]
-}
-```
-
-#### test/e2e（ブラウザE2Eテスト用）
+### Test Spec 構造
 
 ```json
 {
@@ -190,25 +122,19 @@ Types:
   "target": {
     "type": "page",
     "url": "/",
-    "component": "App\\Livewire\\Pages\\Todo\\Index"
+    "component": "App\\Livewire\\Pages\\TodoIndex"
   },
   "scenarios": [
     {
       "name": "page-load",
       "description": "ページが正しく表示される",
-      "steps": [],
-      "assertions": ["h1要素が表示される", "タスク一覧が表示される"],
-      "screenshot": "00-initial"
+      "assertions": ["h1要素が表示される", "タスク一覧が表示される"]
     },
     {
       "name": "add-task",
       "description": "タスクを追加できる",
-      "steps": [
-        "入力欄に「新しいタスク」を入力",
-        "追加ボタンをクリック"
-      ],
-      "assertions": ["新しいタスクが一覧に表示される", "入力欄がクリアされる"],
-      "screenshots": ["01-add-task-before", "02-add-task-after"]
+      "steps": ["入力欄に「新しいタスク」を入力", "追加ボタンをクリック"],
+      "assertions": ["新しいタスクが一覧に表示される", "入力欄がクリアされる"]
     }
   ],
   "required_data": [
@@ -217,11 +143,6 @@ Types:
 }
 ```
 
-**E2E実行環境（CRITICAL）:**
-- playwright-mcp を使用（headless: true）
-- APP_URL でアクセス（Valet）
-- 各シナリオで before/after スクショ必須
-
 **Test Levels:**
 
 | Level | Coverage | Content |
@@ -229,6 +150,60 @@ Types:
 | 1 | 20-40% | 基本操作（表示、主要アクション） |
 | 2 | 40-60% | 追加操作（フォーム、モーダル） |
 | 3 | 60%+ | 全状態・エッジケース（エラー、空状態） |
+
+---
+
+## Spec テンプレート
+
+### data/tables テンプレート
+
+```sql
+INSERT INTO specs (category, type, slug, name, data) VALUES (
+  'data', 'tables', 'tasks', 'tasksテーブル',
+  '{"columns":[{"name":"id","type":"bigint","primary":true},{"name":"title","type":"string","nullable":false,"max":255},{"name":"completed","type":"boolean","default":false},{"name":"timestamps","type":"timestamps"}],"indexes":[],"relations":[],"seeders":{"dev":[{"_comment":"基本状態","title":"買い物に行く","completed":false},{"_comment":"完了状態","title":"レポートを書く","completed":true}]}}'
+);
+```
+
+### ui/pages テンプレート
+
+```sql
+INSERT INTO specs (category, type, slug, name, data, e2e_status) VALUES (
+  'ui', 'pages', 'todo-index', 'Todoメインページ',
+  '{"route":"/","component":"Pages/TodoIndex","depends_on":["data/tables/tasks"],"layout_ascii":"...","operations":["一覧表示","新規作成","完了切替","削除"]}',
+  'pending'
+);
+-- 依存関係を追加
+INSERT INTO spec_dependencies (spec_id, blocked_by_spec_id) VALUES (2, 1);
+```
+
+### test/feature テンプレート（CRITICAL: agentにタスクを渡す前に作成）
+
+```sql
+INSERT INTO specs (category, type, slug, name, data) VALUES (
+  'test', 'feature', 'todo-index', 'Todoページ Featureテスト',
+  '{"level":1,"depends_on":["ui/pages/todo-index"],"target":{"component":"App\\Livewire\\Pages\\TodoIndex"},"scenarios":[{"name":"display","description":"コンポーネントが表示される","assertions":["status 200","タスク一覧が表示"]},{"name":"add-task","description":"タスクを追加できる","assertions":["DBに保存される","一覧に表示される"]}]}'
+);
+```
+
+### test/e2e テンプレート
+
+```sql
+INSERT INTO specs (category, type, slug, name, data) VALUES (
+  'test', 'e2e', 'todo-index', 'Todoページ E2Eテスト',
+  '{"level":1,"depends_on":["ui/pages/todo-index"],"target":{"type":"page","url":"/","component":"App\\Livewire\\Pages\\TodoIndex"},"scenarios":[{"name":"page-load","description":"ページが正しく表示される","assertions":["h1要素が表示される","タスク一覧が表示される"]},{"name":"add-task","description":"タスクを追加できる","steps":["入力欄に「新しいタスク」を入力","追加ボタンをクリック"],"assertions":["新しいタスクが一覧に表示される"]}],"required_data":[]}'
+);
+```
+
+### test/unit テンプレート（action spec がある場合に作成）
+
+```sql
+INSERT INTO specs (category, type, slug, name, data) VALUES (
+  'test', 'unit', 'create-task', 'CreateTask Unitテスト',
+  '{"level":1,"depends_on":["action/sync/create-task"],"target":{"class":"App\\Actions\\CreateTask"},"scenarios":[{"name":"execute","description":"タスクを作成できる","assertions":["Task が作成される","イベントが発火する"]},{"name":"validation","description":"バリデーションが機能する","assertions":["空のtitleでエラー"]}]}'
+);
+```
+
+**重要**: /bpf は agentにタスクを渡す前に、対応する test/feature または test/unit の spec を作成すること。agentはこの spec を参照してテストコードを作成する。
 
 ---
 
@@ -317,10 +292,10 @@ approved の spec がある場合、依存関係を解決して Agents を起動
     <action>Wave ごとに Agents を background で並列起動</action>
     <method>Task tool with run_in_background: true</method>
     <mapping>
-      <map category="data" type="tables" agent="db-agent" />
-      <map category="ui" type="*" agent="livewire-agent" />
-      <map category="action" type="*" agent="action-agent" />
-      <map category="test" type="*" agent="test-agent" />
+      <map category="data" type="tables" agent="db-architect" />
+      <map category="ui" type="*" agent="livewire" />
+      <map category="action" type="*" agent="artisan" />
+      <map category="test" type="*" agent="tester" />
     </mapping>
   </step>
 
@@ -344,8 +319,8 @@ Task tool:
 **例: Wave 2 を並列実行**
 ```
 // 単一メッセージで複数の Task tool を呼び出す
-Task(subagent_type="general-purpose", prompt="livewire-agentとして実行: spec_id=3", run_in_background=true)
-Task(subagent_type="general-purpose", prompt="action-agentとして実行: spec_id=4", run_in_background=true)
+Task(subagent_type="general-purpose", prompt="livewireとして実行: spec_id=3", run_in_background=true)
+Task(subagent_type="general-purpose", prompt="artisanとして実行: spec_id=4", run_in_background=true)
 ```
 
 ---
@@ -362,9 +337,9 @@ Task(subagent_type="general-purpose", prompt="action-agentとして実行: spec_
     <if-not-done>依存先の実装を先に完了</if-not-done>
   </step>
 
-  <step name="3-launch-test-agent">
-    <action>test-agent を background で起動</action>
-    <prompt>test-agentとして実行: spec_id={id}</prompt>
+  <step name="3-launch-tester">
+    <action>tester を background で起動</action>
+    <prompt>testerとして実行: spec_id={id}</prompt>
   </step>
 
   <step name="4-review-results">
@@ -376,60 +351,6 @@ Task(subagent_type="general-purpose", prompt="action-agentとして実行: spec_
     </on-failure>
   </step>
 </test-orchestration>
-
----
-
-## Spec テンプレート
-
-### data/tables テンプレート
-
-```sql
-INSERT INTO specs (category, type, slug, name, data) VALUES (
-  'data', 'tables', 'tasks', 'tasksテーブル',
-  '{"columns":[{"name":"id","type":"bigint","primary":true},{"name":"title","type":"string","nullable":false,"max":255},{"name":"completed","type":"boolean","default":false},{"name":"timestamps","type":"timestamps"}],"indexes":[],"relations":[],"seeders":{"dev":[{"_comment":"基本状態","title":"買い物に行く","completed":false},{"_comment":"完了状態","title":"レポートを書く","completed":true}]}}'
-);
-```
-
-### ui/pages テンプレート
-
-```sql
-INSERT INTO specs (category, type, slug, name, data, e2e_status) VALUES (
-  'ui', 'pages', 'todo-index', 'Todoメインページ',
-  '{"route":"/","component":"Pages/TodoIndex","depends_on":["data/tables/tasks"],"layout_ascii":"...","operations":["一覧表示","新規作成","完了切替","削除"]}',
-  'pending'
-);
--- 依存関係を追加
-INSERT INTO spec_dependencies (spec_id, blocked_by_spec_id) VALUES (2, 1);
-```
-
-### test/e2e テンプレート
-
-```sql
-INSERT INTO specs (category, type, slug, name, data) VALUES (
-  'test', 'e2e', 'todo-index', 'Todoページ E2Eテスト',
-  '{"level":1,"depends_on":["ui/pages/todo-index"],"target":{"type":"page","url":"/","component":"App\\Livewire\\Pages\\TodoIndex"},"scenarios":[{"name":"page-load","description":"ページが正しく表示される","assertions":["h1要素が表示される","タスク一覧が表示される"]},{"name":"add-task","description":"タスクを追加できる","steps":["入力欄に「新しいタスク」を入力","追加ボタンをクリック"],"assertions":["新しいタスクが一覧に表示される"]}],"required_data":[]}'
-);
-```
-
-### test/feature テンプレート（CRITICAL: agentにタスクを渡す前に作成）
-
-```sql
-INSERT INTO specs (category, type, slug, name, data) VALUES (
-  'test', 'feature', 'todo-index', 'Todoページ Featureテスト',
-  '{"level":1,"depends_on":["ui/pages/todo-index"],"target":{"component":"App\\Livewire\\Pages\\TodoIndex"},"scenarios":[{"name":"display","description":"コンポーネントが表示される","assertions":["status 200","タスク一覧が表示"]},{"name":"add-task","description":"タスクを追加できる","assertions":["DBに保存される","一覧に表示される"]},{"name":"toggle-complete","description":"完了状態を切り替えられる","assertions":["completed が反転する"]},{"name":"delete-task","description":"タスクを削除できる","assertions":["DBから削除される"]}]}'
-);
-```
-
-### test/unit テンプレート（action spec がある場合に作成）
-
-```sql
-INSERT INTO specs (category, type, slug, name, data) VALUES (
-  'test', 'unit', 'create-task', 'CreateTask Unitテスト',
-  '{"level":1,"depends_on":["action/sync/create-task"],"target":{"class":"App\\Actions\\CreateTask"},"scenarios":[{"name":"execute","description":"タスクを作成できる","assertions":["Task が作成される","イベントが発火する"]},{"name":"validation","description":"バリデーションが機能する","assertions":["空のtitleでエラー"]}]}'
-);
-```
-
-**重要**: /blueprint は agentにタスクを渡す前に、対応する test/feature または test/unit の spec を作成すること。agentはこの spec を参照してテストコードを作成する。
 
 ---
 
@@ -465,7 +386,7 @@ INSERT INTO specs (category, type, slug, name, data) VALUES (
 ## SQLパターン
 
 ```bash
-DB=".blueprint-flow/blueprint/blueprint.db"
+DB="blueprint/blueprint.db"
 
 # 状況確認
 sqlite3 -json $DB "SELECT id, category, type, slug, name, status, human_reviewed FROM specs ORDER BY id"
@@ -492,31 +413,10 @@ sqlite3 $DB "INSERT INTO spec_dependencies (spec_id, blocked_by_spec_id) VALUES 
 
 ---
 
-## Blueprint仕様の品質基準
-
-1. **コーディング可能** - 実装者が迷わず着手できる
-2. **具体的** - 曖昧さがない
-3. **詳細** - 必要な情報が揃っている
-4. **意図が明確** - なぜこの仕様かが分かる
-5. **無駄がない** - 冗長な記述を避ける
-6. **正確** - 誤解の余地がない
-
----
-
 ## Status Flow
 
 ```
 draft → pending_review → approved → in_progress → impl_review → testing → done
               ↑                           ↓
               └────── needs_revision ←────┘
-```
-
----
-
-## playwright-mcp スクリーンショット（UI確認用）
-
-```javascript
-mcp__playwright-mcp__playwright_navigate({ url: "...", headless: true })
-mcp__playwright-mcp__playwright_screenshot({ name: "...", savePng: true })
-mcp__playwright-mcp__playwright_close()
 ```

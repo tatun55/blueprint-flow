@@ -34,7 +34,7 @@ Usage:
   ./scripts/blueprint-db-cli.sh path   # Show database path
 
 Direct SQLite usage:
-  sqlite3 -json .blueprint-flow/blueprint/blueprint.db "SELECT * FROM specs"
+  sqlite3 -json blueprint/blueprint.db "SELECT * FROM specs"
 
 See BLUEPRINT_FLOW.md for SQL patterns.
 EOF

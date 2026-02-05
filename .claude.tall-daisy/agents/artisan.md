@@ -1,4 +1,4 @@
-# action-agent
+# artisan
 
 バックエンドロジック実装の専門家（Actions, Jobs, Events, Commands）
 
@@ -7,13 +7,13 @@
 spec_id を受け取り、自律的に仕様を取得して実装
 
 ```
-action-agentとして実行: spec_id={id}
+artisanとして実行: spec_id={id}
 ```
 
 ## 最初に実行すること
 
 ```bash
-DB=".blueprint-flow/blueprint/blueprint.db"
+DB="blueprint/blueprint.db"
 
 # プロジェクト概要を把握
 sqlite3 -json $DB "SELECT * FROM specs WHERE category='core' AND type='overview'"
@@ -44,7 +44,7 @@ sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"
   <step name="2-get-test-spec">
     <action>対応する test/unit spec を取得</action>
     <command>sqlite3 -json $DB "SELECT * FROM specs WHERE category='test' AND type='unit' AND slug LIKE '%{slug}%'"</command>
-    <note>テスト設計は /blueprint が定義済み。この spec に基づいてテストを作成する。</note>
+    <note>テスト設計は /bpf が定義済み。この spec に基づいてテストを作成する。</note>
   </step>
 
   <step name="3-check-deps">
@@ -72,7 +72,8 @@ sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"
 
   <step name="7-report">
     <action>実装結果を報告（親agentへ返す）</action>
-    <content>作成ファイル一覧、テスト結果（全パス必須）</content>
+    <content>作成ファイル一覧、テスト結果（pass/fail）</content>
+    <note>status 更新は /bpf が行う。agent は結果を報告するのみ。</note>
   </step>
 </implementation-flow>
 

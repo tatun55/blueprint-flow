@@ -58,6 +58,8 @@ Table test_runs {
 Table screenshots {
   id integer [pk, increment]
   test_run_id integer [not null, ref: > test_runs.id]
+  step_order integer [not null, default: 0, note: 'スクショの順序（0始まり）']
+  description text [not null, default: '', note: '状態の説明（例: ページロード直後、タスク追加後）']
   type text [not null, note: 'baseline, actual, diff']
   file_path text [not null]
   width integer

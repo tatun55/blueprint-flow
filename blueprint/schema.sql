@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS spec_dependencies (
 CREATE TABLE IF NOT EXISTS tasks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     spec_id INTEGER NOT NULL REFERENCES specs(id) ON DELETE CASCADE,
-    agent_type TEXT NOT NULL CHECK(agent_type IN ('db-agent', 'livewire-agent', 'action-agent', 'test-agent')),
+    agent_type TEXT NOT NULL CHECK(agent_type IN ('db-architect', 'livewire', 'artisan', 'tester')),
     content TEXT NOT NULL,
     status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'completed', 'failed')),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP

@@ -7,23 +7,23 @@
 ```
 Skill (1つ)                 Agents (4つ, 並列実行可能)
 ────────────────────        ────────────────────
-/blueprint                  db-agent       → DB実装
-  - 仕様策定                livewire-agent → UI実装
-  - テスト設計              action-agent   → バックエンド
-  - 実装オーケストレーション  test-agent     → テストコード実行
+/bpf                        db-architect → DB設計・実装
+  - 仕様策定                livewire     → UI実装
+  - テスト設計              artisan      → バックエンド
+  - 実装オーケストレーション  tester       → テスト実行
   - 修正サイクル管理
 ```
 
 ### アーキテクチャ原則
 
-| 項目 | /blueprint | Agents |
-|------|-----------|--------|
+| 項目 | /bpf | Agents |
+|------|------|--------|
 | 役割 | 上流工程（仕様・設計） | 下流工程（実装・テスト） |
 | コード知識 | なし | あり（専門分野） |
 | ユーザー対話 | AskUserQuestion | なし |
 | 実行モード | Foreground | Background（並列） |
 
-**コンテキスト分離**: /blueprint はコードを一切読まない。spec ID を渡すだけで、各 agent が依存先を含めて仕様を取得・実装する。
+**コンテキスト分離**: /bpf はコードを一切読まない。spec ID を渡すだけで、各 agent が依存先を含めて仕様を取得・実装する。
 
 ---
 
@@ -144,7 +144,7 @@ blueprint.db への直接アクセス。CLIラッパーは不要。
 
 ```bash
 # DB パス（プロジェクトルートから）
-DB=".blueprint-flow/blueprint/blueprint.db"
+DB="blueprint/blueprint.db"
 
 # 初期化・リセット（スクリプト使用）
 ./scripts/blueprint-db-cli.sh init
@@ -207,10 +207,10 @@ UPDATE specs SET human_reviewed = 'none' WHERE id IN (SELECT id FROM deps)
 
 ---
 
-## Skill: `/blueprint`
+## Skill: `/bpf`
 
 ### ファイル
-`skills/blueprint/SKILL.md`
+`skills/bpf/SKILL.md`
 
 ### 目的
 仕様策定・テスト設計・実装オーケストレーション・修正サイクル管理
@@ -221,9 +221,9 @@ UPDATE specs SET human_reviewed = 'none' WHERE id IN (SELECT id FROM deps)
 
 | パターン | 動作 |
 |----------|------|
-| `/blueprint` | プロジェクト状況を分析し、推奨アクションを提示 |
-| `/blueprint pull` | blueprint-flowサブモジュールを最新版に更新 |
-| `/blueprint <指示>` | 指示に基づいて仕様策定・実装・テストを実行 |
+| `/bpf` | プロジェクト状況を分析し、推奨アクションを提示 |
+| `/bpf pull` | blueprint-flowサブモジュールを最新版に更新 |
+| `/bpf <指示>` | 指示に基づいて仕様策定・実装・テストを実行 |
 
 ### オーケストレーションフロー
 
@@ -232,8 +232,33 @@ UPDATE specs SET human_reviewed = 'none' WHERE id IN (SELECT id FROM deps)
 2. 必要な情報が不足 → AskUserQuestion で確認
 3. Spec を作成/更新（data, ui, action, test）
 4. 依存関係を解決して実装順序を決定
-5. Agents を background で並列起動（spec ID を渡す）
-6. 結果を確認、失敗があれば修正サイクル
+5. 対象 spec の status を 'in_progress'、working_by を agent 名に更新
+6. Agents を background で並列起動（spec ID を渡す）
+7. Agent 結果を確認し、status を更新:
+   - 成功 → 'impl_review', working_by = NULL
+   - 失敗 → 'needs_revision', working_by = NULL, revision_count++, revision_reason 記録
+   - 対応する test spec も同様に更新
+8. 失敗があれば修正サイクル
+```
+
+### Status 管理責務（CRITICAL）
+
+**status 更新は /bpf のみが行う。agent は結果を報告するのみ。**
+
+```bash
+DB="blueprint/blueprint.db"
+
+# Agent 起動前: lock
+sqlite3 $DB "UPDATE specs SET status = 'in_progress', working_by = '{agent-type}' WHERE id = {spec_id}"
+
+# Agent 成功後: unlock + advance
+sqlite3 $DB "UPDATE specs SET status = 'impl_review', working_by = NULL WHERE id = {spec_id}"
+
+# Agent 失敗後: unlock + revision
+sqlite3 $DB "UPDATE specs SET status = 'needs_revision', working_by = NULL, revision_count = revision_count + 1, revision_reason = '{reason}' WHERE id = {spec_id}"
+
+# Agent クラッシュ時: unlock（リカバリ）
+sqlite3 $DB "UPDATE specs SET status = 'approved', working_by = NULL WHERE id = {spec_id} AND working_by IS NOT NULL"
 ```
 
 ### 依存関係と並列実行
@@ -246,9 +271,9 @@ UPDATE specs SET human_reviewed = 'none' WHERE id IN (SELECT id FROM deps)
   test/e2e/todo-index ←── ui/pages/todo-index
 
 並列実行:
-  Wave 1: db-agent (data/tables/tasks)
-  Wave 2: livewire-agent (ui/pages/todo-index) + action-agent (action/sync/create-task)  ← 並列
-  Wave 3: test-agent (test/e2e/todo-index)
+  Wave 1: db-architect (data/tables/tasks)
+  Wave 2: livewire (ui/pages/todo-index) + artisan (action/sync/create-task)  ← 並列
+  Wave 3: tester (test/e2e/todo-index)
 ```
 
 ### Agent 起動方法
@@ -338,7 +363,7 @@ public function calculateTotal(array $items): int
 
 ---
 
-## Agent 1: `db-agent`
+## Agent 1: `db-architect`
 
 ### 役割
 DB実装の専門家（Migration, Model, Seeder）
@@ -348,7 +373,7 @@ spec_id を受け取り、自律的に仕様を取得して実装
 
 ### 最初に実行すること
 ```bash
-DB=".blueprint-flow/blueprint/blueprint.db"
+DB="blueprint/blueprint.db"
 sqlite3 -json $DB "SELECT * FROM specs WHERE category='core' AND type='overview'"
 sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"
 ```
@@ -375,19 +400,19 @@ User::factory()->count(10)->create();  // NG
 
 ---
 
-## Agent 2: `livewire-agent`
+## Agent 2: `livewire`
 
 ### 役割
 UI実装の専門家（Livewire Component + Blade）
 
-**Migration/Model/Seeder は作成しない。db-agent の責務。**
+**Migration/Model/Seeder は作成しない。db-architect の責務。**
 
 ### 入力
 spec_id を受け取り、自律的に仕様を取得して実装
 
 ### 最初に実行すること
 ```bash
-DB=".blueprint-flow/blueprint/blueprint.db"
+DB="blueprint/blueprint.db"
 sqlite3 -json $DB "SELECT * FROM specs WHERE category='core' AND type='overview'"
 sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"
 # depends_on があれば依存先も取得
@@ -401,7 +426,7 @@ sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"
 
 ---
 
-## Agent 3: `action-agent`
+## Agent 3: `artisan`
 
 ### 役割
 バックエンドロジック実装の専門家（Actions, Jobs, Events, Commands）
@@ -411,7 +436,7 @@ spec_id を受け取り、自律的に仕様を取得して実装
 
 ### 最初に実行すること
 ```bash
-DB=".blueprint-flow/blueprint/blueprint.db"
+DB="blueprint/blueprint.db"
 sqlite3 -json $DB "SELECT * FROM specs WHERE category='core' AND type='overview'"
 sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"
 # depends_on があれば依存先も取得
@@ -426,19 +451,19 @@ sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"
 
 ---
 
-## Agent 4: `test-agent`
+## Agent 4: `tester`
 
 ### 役割
 テストコード作成・実行の専門家
 
-**テスト設計は /blueprint が spec として定義済み。test-agent はコード作成と実行のみ。**
+**テスト設計は /bpf が spec として定義済み。tester はコード作成と実行のみ。**
 
 ### 入力
 spec_id (test/unit, test/feature, test/e2e) を受け取り、テストコードを作成・実行
 
 ### 最初に実行すること
 ```bash
-DB=".blueprint-flow/blueprint/blueprint.db"
+DB="blueprint/blueprint.db"
 sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"
 # depends_on から対象の ui/pages または action spec を取得
 ```
@@ -449,24 +474,17 @@ sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"
 |------|--------|
 | unit | `tests/Unit/{path}/{Name}Test.php` |
 | feature | `tests/Feature/{path}/{Name}Test.php` |
-| e2e | `tests/e2e/specs/{slug}.spec.ts` |
+| e2e | playwright-mcp で実行 + `e2e.db` にスクショ＋description を登録 |
 
-### E2E テストコードテンプレート
+### E2E テスト方式
 
-```typescript
-// tests/e2e/specs/{slug}.spec.ts
-import { test, expect } from '@playwright/test';
+テストコードファイルは作成しない。playwright-mcp でブラウザ操作し、各状態でスクリーンショットを撮影。
+スクショは `e2e.db` の `screenshots` テーブルに description（状態の説明）と step_order（順序）をセットで保存。
 
-const BASE_URL = process.env.APP_URL || 'http://localhost:8000';
-
-test.describe('{ページ名}', () => {
-  test('{scenario-name}: {description}', async ({ page }) => {
-    await page.goto(BASE_URL + '{path}');
-
-    // assertions from spec.scenarios[].assertions
-    await expect(page.locator('h1')).toBeVisible();
-  });
-});
+```bash
+# スクショ登録: screenshot <run_id> <step_order> <description> <type> <path>
+./scripts/e2e-db-cli.sh screenshot $RUN_ID 0 'ページロード直後' actual tests/e2e/screenshots/{slug}/00-initial.png
+./scripts/e2e-db-cli.sh screenshot $RUN_ID 1 'タスク追加後の一覧' actual tests/e2e/screenshots/{slug}/01-add-task-after.png
 ```
 
 ---
@@ -486,19 +504,19 @@ draft → pending_review → approved → in_progress → impl_review → testin
 ```
 User: 「タスク管理アプリを作りたい」
 
-/blueprint:
+/bpf:
   1. AskUserQuestion で要件確認
   2. core/overview/main を作成
   3. data/tables/tasks を作成（seeders.dev 含む）
   4. ui/pages/todo-index を作成（depends_on: data/tables/tasks）
   5. test/e2e/todo-index を作成（depends_on: ui/pages/todo-index、scenarios 定義）
   6. 依存順で agents を起動:
-     Wave 1: db-agent (spec_id=2) → background
-     Wave 2: livewire-agent (spec_id=3) → background
-     Wave 3: test-agent (spec_id=4) → background
+     Wave 1: db-architect (spec_id=2) → background
+     Wave 2: livewire (spec_id=3) → background
+     Wave 3: tester (spec_id=4) → background
   7. 結果確認、失敗があれば修正
 
-/blueprint:
+/bpf:
   「テストが失敗しました」
   → spec を修正 or agent を再起動
 ```

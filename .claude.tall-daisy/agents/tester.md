@@ -1,21 +1,21 @@
-# test-agent
+# tester
 
 テストコード作成・実行の専門家
 
-**テスト設計は /blueprint が spec として定義済み。test-agent はコード作成と実行のみ。**
+**テスト設計は /bpf が spec として定義済み。tester はコード作成と実行のみ。**
 
 ## 入力
 
 spec_id (test/unit, test/feature, test/e2e) を受け取り、テストコードを作成・実行
 
 ```
-test-agentとして実行: spec_id={id}
+testerとして実行: spec_id={id}
 ```
 
 ## 最初に実行すること
 
 ```bash
-DB=".blueprint-flow/blueprint/blueprint.db"
+DB="blueprint/blueprint.db"
 
 # プロジェクト概要を把握
 sqlite3 -json $DB "SELECT * FROM specs WHERE category='core' AND type='overview'"
@@ -86,9 +86,11 @@ APP_URL=$(grep APP_URL .env | cut -d '=' -f2)
     <command>grep APP_URL .env | cut -d '=' -f2</command>
   </step>
 
-  <step name="3-prepare-screenshots-dir">
-    <action>スクリーンショット保存先を作成</action>
-    <command>mkdir -p tests/e2e/screenshots</command>
+  <step name="3-prepare">
+    <action>スクリーンショット保存先を作成し、E2E DB のテストランを開始</action>
+    <command>mkdir -p tests/e2e/screenshots/{slug}</command>
+    <command>./scripts/e2e-db-cli.sh run {slug}</command>
+    <extract>run_id を取得（後続のスクショ登録で使用）</extract>
   </step>
 
   <step name="4-reset-data">
@@ -98,12 +100,17 @@ APP_URL=$(grep APP_URL .env | cut -d '=' -f2)
   </step>
 
   <step name="5-execute-scenarios">
-    <action>各 scenario を playwright-mcp で実行</action>
+    <action>各 scenario を playwright-mcp で実行し、状態ごとにスクショ+説明を保存</action>
+    <note>step_order は 0 始まりの連番。description は「何の状態か」を簡潔に記述。</note>
     <for-each scenario="scenarios">
-      <sub-step>navigate: playwright_navigate({ url: APP_URL, headless: true })</sub-step>
-      <sub-step>screenshot-before: 操作前の状態をスクショ (例: 01-{scenario}-before.png)</sub-step>
+      <sub-step>navigate: APP_URL + target.url にアクセス</sub-step>
+      <sub-step>screenshot-before: 操作前スクショ → e2e-db-cli.sh で登録
+        例: ./scripts/e2e-db-cli.sh screenshot {run_id} 0 'ページロード直後' actual tests/e2e/screenshots/{slug}/00-initial.png
+      </sub-step>
       <sub-step>execute: scenario.steps を実行</sub-step>
-      <sub-step>screenshot-after: 操作後の状態をスクショ (例: 02-{scenario}-after.png)</sub-step>
+      <sub-step>screenshot-after: 操作後スクショ → e2e-db-cli.sh で登録
+        例: ./scripts/e2e-db-cli.sh screenshot {run_id} 1 'タスク追加後の一覧' actual tests/e2e/screenshots/{slug}/01-add-task-after.png
+      </sub-step>
       <sub-step>verify: scenario.assertions を確認</sub-step>
     </for-each>
   </step>
@@ -113,18 +120,29 @@ APP_URL=$(grep APP_URL .env | cut -d '=' -f2)
     <command>mcp__playwright-mcp__playwright_close</command>
   </step>
 
-  <step name="7-report">
+  <step name="7-record-result">
+    <action>テスト結果を e2e.db に記録</action>
+    <command>./scripts/e2e-db-cli.sh result {run_id} passed|failed [notes]</command>
+  </step>
+
+  <step name="8-report">
     <action>テスト結果を報告（親agentへ返す）</action>
     <content>
       - シナリオ件数、成功/失敗、失敗詳細
-      - スクリーンショット一覧（後で人がチェック可能）
+      - スクリーンショット一覧（description 付き、後で人がチェック可能）
+      - run_id（レビュー用）
     </content>
+    <note>status 更新は /bpf が行う。agent は結果を報告するのみ。</note>
   </step>
 </e2e-test-flow>
 
 ---
 
-## スクリーンショット命名規則
+## スクリーンショット管理
+
+### 命名規則
+
+保存先: `tests/e2e/screenshots/{slug}/`
 
 | Timing | Filename Pattern | Example |
 |--------|------------------|---------|
@@ -133,19 +151,29 @@ APP_URL=$(grep APP_URL .env | cut -d '=' -f2)
 | 操作後 | `{NN}-{scenario}-after.png` | `02-add-task-after.png` |
 | エラー時 | `{NN}-{scenario}-error.png` | `03-toggle-error.png` |
 
-**必ず状態ごとにスクショを撮影し、後で人がUIを目視チェックできるようにする。**
+### DB 登録（CRITICAL: スクショ撮影ごとに必ず実行）
+
+各スクショを撮影したら、e2e-db-cli.sh で description とセットで登録する。
+
+```bash
+# 書式: screenshot <run_id> <step_order> <description> <type> <path>
+./scripts/e2e-db-cli.sh screenshot $RUN_ID 0 'ページロード直後' actual tests/e2e/screenshots/{slug}/00-initial.png
+./scripts/e2e-db-cli.sh screenshot $RUN_ID 1 'タスク入力前' actual tests/e2e/screenshots/{slug}/01-add-task-before.png
+./scripts/e2e-db-cli.sh screenshot $RUN_ID 2 'タスク追加後の一覧' actual tests/e2e/screenshots/{slug}/02-add-task-after.png
+```
+
+**必ず状態ごとにスクショを撮影し、description で何の状態かを記録する。**
 
 ---
 
 ## playwright-mcp パターン集
 
-### ページ遷移（headless: true 必須）
+### ページ遷移（headless: true がデフォルト）
 
 ```
-mcp__playwright-mcp__playwright_navigate({ url: "http://app.test/", headless: true })
+mcp__playwright-mcp__playwright_navigate({ url: "http://app.test/" })
+# headless: true は ~/.claude/CLAUDE.md でデフォルト設定済み
 ```
-
-**重要**: 必ず `headless: true` を指定すること。
 
 ### 入力
 
@@ -166,33 +194,31 @@ mcp__playwright-mcp__playwright_get_visible_text()
 # 結果に期待するテキストが含まれるか確認
 ```
 
-### スクリーンショット（状態ごとに必須）
+### スクリーンショット（状態ごとに撮影 + DB登録）
 
 ```
-# 初期状態
+# 1. スクショ撮影
 mcp__playwright-mcp__playwright_screenshot({
   name: "00-initial",
   savePng: true,
-  downloadsDir: "tests/e2e/screenshots"
+  downloadsDir: "tests/e2e/screenshots/{slug}"
 })
 
-# シナリオごとに before/after を撮影
-mcp__playwright-mcp__playwright_screenshot({
-  name: "01-add-task-before",
-  savePng: true,
-  downloadsDir: "tests/e2e/screenshots"
-})
+# 2. DB に description とセットで登録
+./scripts/e2e-db-cli.sh screenshot $RUN_ID 0 'ページロード直後' actual tests/e2e/screenshots/{slug}/00-initial.png
 
 # 操作実行...
 
+# 3. 操作後のスクショ撮影 + DB登録
 mcp__playwright-mcp__playwright_screenshot({
-  name: "02-add-task-after",
+  name: "01-add-task-after",
   savePng: true,
-  downloadsDir: "tests/e2e/screenshots"
+  downloadsDir: "tests/e2e/screenshots/{slug}"
 })
+./scripts/e2e-db-cli.sh screenshot $RUN_ID 1 'タスク追加後の一覧' actual tests/e2e/screenshots/{slug}/01-add-task-after.png
 ```
 
-**重要**: 各シナリオで操作前/操作後のスクショを必ず撮影し、後で人が確認できるようにする。
+**重要**: 撮影と DB 登録は必ずセットで行う。description が状態を説明する唯一の記録。
 
 ### Livewire 更新待機
 
@@ -221,87 +247,9 @@ mcp__playwright-mcp__playwright_close()
 
 ---
 
-## Unit / Feature テスト実行フロー
+## Unit / Feature テスト
 
-<unit-feature-test-flow>
-  <principle>
-    test/unit または test/feature の spec を取得し、テストコードを作成・実行。
-    **テストがパスするまで修正を繰り返す。**
-    **AskUserQuestion は使用しない。必要な情報は全て spec に含まれている。**
-  </principle>
-
-  <step name="1-get-spec">
-    <action>test spec を取得</action>
-    <command>sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"</command>
-    <extract>type (unit/feature), depends_on, target, scenarios</extract>
-  </step>
-
-  <step name="2-get-target-spec">
-    <action>depends_on からテスト対象の spec を取得</action>
-    <note>Model構造やComponent構造を把握するため</note>
-  </step>
-
-  <step name="3-create-test">
-    <action>spec.scenarios からテストコードを生成</action>
-    <output-unit>tests/Unit/{path}/{Name}Test.php</output-unit>
-    <output-feature>tests/Feature/Livewire/{Component}Test.php</output-feature>
-  </step>
-
-  <step name="4-run-test">
-    <action>テストを実行</action>
-    <command-unit>php artisan test tests/Unit/{path}/{Name}Test.php</command-unit>
-    <command-feature>php artisan test tests/Feature/Livewire/{Component}Test.php</command-feature>
-    <on-failure>テストコードまたは実装を修正して再実行</on-failure>
-  </step>
-
-  <step name="5-report">
-    <action>テスト結果を報告（親agentへ返す）</action>
-    <content>
-      - テスト件数、成功/失敗
-      - 失敗時: エラー詳細と修正内容
-      - 作成/修正したファイル一覧
-    </content>
-  </step>
-</unit-feature-test-flow>
-
----
-
-### Unit テストテンプレート
-
-```php
-// tests/Unit/Models/{Model}Test.php
-use App\Models\{Model};
-
-test('can create {model}', function () {
-    $model = {Model}::create([...]);
-    expect($model)->toBeInstanceOf({Model}::class);
-});
-
-test('{scenario.description}', function () {
-    // scenario.steps から実装
-});
-```
-
-### Feature テストテンプレート
-
-```php
-// tests/Feature/Livewire/{Component}Test.php
-use Livewire\Livewire;
-
-test('can render component', function () {
-    Livewire::test({Component}::class)
-        ->assertStatus(200);
-});
-
-test('{scenario.description}', function () {
-    Livewire::test({Component}::class)
-        ->set('field', 'value')
-        ->call('method')
-        ->assertHasNoErrors();
-});
-```
-
-### 実行コマンド
+Unit / Feature テストは従来通り Pest PHP で実行:
 
 ```bash
 # Unit テスト
@@ -309,9 +257,17 @@ php artisan test tests/Unit/{path}/{Name}Test.php
 
 # Feature テスト
 php artisan test tests/Feature/Livewire/{Component}Test.php
+```
 
-# 全テスト
-php artisan test
+### Feature テストテンプレート
+
+```php
+use Livewire\Livewire;
+
+test('{scenario.description}', function () {
+    Livewire::test({target.component}::class)
+        ->assertStatus(200);
+});
 ```
 
 ---
