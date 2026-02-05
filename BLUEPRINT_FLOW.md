@@ -5,13 +5,13 @@
 ## 全体構成
 
 ```
-Skill (1つ)                 Agents (4つ, 並列実行可能)
+Skill (1つ)                 Agents (5つ, 並列実行可能)
 ────────────────────        ────────────────────
-/bpf                        db-architect → DB設計・実装
-  - 仕様策定                livewire     → UI実装
-  - テスト設計              artisan      → バックエンド
-  - 実装オーケストレーション  tester       → テスト実行
-  - 修正サイクル管理
+/bpf                        db-architect   → DB設計・実装
+  - 仕様策定                livewire       → UI実装
+  - テスト設計              artisan        → バックエンド
+  - 実装オーケストレーション  tester         → テスト実行
+  - 修正サイクル管理        blueprint-flow → 設定管理
 ```
 
 ### アーキテクチャ原則
@@ -474,26 +474,42 @@ sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"
 |------|--------|
 | unit | `tests/Unit/{path}/{Name}Test.php` |
 | feature | `tests/Feature/{path}/{Name}Test.php` |
-| e2e | playwright-mcp で実行 + `manifest.json` にスクショ＋description を保存 |
+| e2e | `tests/e2e/{slug}.spec.ts` + スクリーンショット |
 
-### E2E テスト方式
+### E2E Per-Worker DB 分離
 
-テストコードファイルは作成しない。playwright-mcp でブラウザ操作し、各状態でスクリーンショットを撮影。
-スクショは `tests/Browser/screenshots/{slug}/` に保存し、同ディレクトリの `manifest.json` に description をセットで記録。
+各 Playwright worker が独自の SQLite DB + artisan serve サーバーを持つ:
 
-```json
-// tests/Browser/screenshots/{slug}/manifest.json
-{
-  "slug": "todo-index",
-  "spec_id": 5,
-  "tested_at": "2026-02-05T12:00:00Z",
-  "result": "passed",
-  "screenshots": [
-    { "file": "00-page-load-initial.png", "description": "ページロード直後" },
-    { "file": "01-add-task-after.png", "description": "タスク追加後の一覧" }
-  ]
-}
 ```
+Worker 0: SQLite /tmp/nishikinomiya_e2e_0.sqlite → artisan serve --port=8100
+Worker 1: SQLite /tmp/nishikinomiya_e2e_1.sqlite → artisan serve --port=8101
+Worker 2: SQLite /tmp/nishikinomiya_e2e_2.sqlite → artisan serve --port=8102
+Worker 3: SQLite /tmp/nishikinomiya_e2e_3.sqlite → artisan serve --port=8103
+```
+
+- `tests/e2e/base.ts` の worker-scoped fixture が `migrate:fresh --seed` を自動実行
+- **tester agent は `migrate:fresh` を手動実行しない**
+- **テストファイル間の DB 状態依存を考慮不要**（各 worker が独立 DB）
+- URL は必ず相対パス（`/login`, `/e2e-login/3` 等）を使用
+- テストファイルは `import { test, expect } from './base'` を使用
+
+---
+
+## Agent 5: `blueprint-flow`
+
+### 役割
+Blueprint-Flow 設定管理の専門家
+
+### 責務
+1. `BLUEPRINT_FLOW.md` の更新
+2. `agents/*.md` の修正
+3. `skills/bpf/SKILL.md` の修正
+4. `CLAUDE.md` の修正
+5. シンボリックリンク整合性確認
+
+### 安全性制約
+- **変更可能**: `.blueprint-flow/` 配下のみ
+- **変更禁止**: `app/`, `resources/`, `routes/`, `config/`, `database/`, `tests/`, `blueprint/blueprint.db`
 
 ---
 

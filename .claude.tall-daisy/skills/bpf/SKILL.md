@@ -343,43 +343,117 @@ Task(subagent_type="general-purpose", prompt="artisanとして実行: spec_id=4"
   </step>
 
   <step name="4-review-results">
-    <action>テスト結果を確認</action>
+    <action>テスト結果を確認（tester の構造化報告を読む）</action>
+    <on-success>spec status を impl_review に更新</on-success>
     <on-failure>
-      <sub-action>失敗原因を分析</sub-action>
-      <sub-action>spec 修正 or 実装修正が必要か判断</sub-action>
-      <sub-action>修正後、再実行</sub-action>
+      tester の失敗診断の blame に基づいて修正サイクル（3層判断システム）へルーティング:
+      - blame=test（自己修正済み・成功） → 対応不要
+      - blame=test（自己修正失敗） → Tier 2: revision_context を test spec に書き込み → tester 再実行
+      - blame=code → Tier 2: revision_context を impl spec に書き込み → livewire/artisan 起動
+      - blame=unknown → Tier 3: ユーザーにスクショ+診断を提示して判断を仰ぐ
     </on-failure>
   </step>
 </test-orchestration>
 
 ---
 
-## 修正サイクル
+## 修正サイクル（3層判断システム）
+
+tester agent の報告には各失敗の **blame**（test/code/unknown）が含まれる。
+Hub は blame に基づいて機械的にルーティングする。
 
 <revision-cycle>
-  <trigger>テスト失敗 / 実装エラー / レビュー指摘</trigger>
+  <trigger>tester agent が失敗を報告</trigger>
 
-  <step name="1-analyze">
-    <action>失敗原因を分析</action>
-    <categories>
-      <category name="spec-issue">仕様の問題 → spec を修正</category>
-      <category name="impl-issue">実装の問題 → agent を再実行</category>
-      <category name="test-issue">テストの問題 → test spec を修正</category>
-    </categories>
-  </step>
+  <tier name="1-tester-self-fix" label="Tier 1: tester 自己修正（自動）">
+    <condition>blame=test かつ高確信度</condition>
+    <action>tester が自動で修正・再実行済み。成功していれば対応不要。</action>
+    <note>tester の報告に「自己修正: あり」と記載される。失敗診断セクションがなければ成功。</note>
+  </tier>
 
-  <step name="2-fix">
-    <action>問題に応じて修正</action>
-    <spec-fix>
-      <command>sqlite3 $DB "UPDATE specs SET data = '{...}', human_reviewed = 'none' WHERE id = {id}"</command>
-      <command>sqlite3 $DB "UPDATE specs SET status = 'approved' WHERE id = {id}"</command>
-    </spec-fix>
-  </step>
+  <tier name="2-impl-agent-diagnosis" label="Tier 2: 実装 agent に診断・修正を委譲">
+    <condition>blame=code、または blame=test だが tester 自己修正で再失敗</condition>
+    <action>
+      1. tester の失敗診断（エラー・根拠・修正提案）を revision_context として
+         対象 spec の data に書き込む
+      2. blame=code → 対応する ui/action spec を特定し、livewire/artisan agent を起動
+         blame=test（再失敗）→ test spec に revision_context を書き込み、tester を再起動
+    </action>
+    <hub-commands>
+      <!-- blame=code の場合: impl spec に revision_context を追加して agent 起動 -->
+      sqlite3 $DB "UPDATE specs SET
+        data = json_set(data, '$.revision_context', json('{
+          \"source_test_spec_id\": {test_spec_id},
+          \"failures\": [{tester の失敗診断をそのまま転記}]
+        }')),
+        status = 'in_progress',
+        working_by = 'livewire'
+        WHERE id = {impl_spec_id}"
 
-  <step name="3-re-execute">
-    <action>該当 agent を再実行</action>
-  </step>
+      <!-- blame=test（再失敗）の場合: test spec に revision_context を追加 -->
+      sqlite3 $DB "UPDATE specs SET
+        data = json_set(data, '$.revision_context', json('{
+          \"attempt\": 2,
+          \"previous_failures\": [{tester の失敗診断をそのまま転記}]
+        }')),
+        status = 'in_progress',
+        working_by = 'tester'
+        WHERE id = {test_spec_id}"
+    </hub-commands>
+  </tier>
+
+  <tier name="3-user-judgment" label="Tier 3: ユーザー判断">
+    <condition>blame=unknown、または Tier 2 でも解決しない場合</condition>
+    <action>
+      ユーザーに以下を提示して判断を仰ぐ:
+      1. 失敗スクリーンショット（tests/e2e/screenshots/ または test-results/）
+      2. tester の失敗診断（エラー・根拠・修正提案）
+      3. 関連する app コードのパス（tester の根拠に記載）
+      AskUserQuestion で「テスト修正 / アプリ修正 / 仕様変更」を選択させる
+    </action>
+  </tier>
 </revision-cycle>
+
+### revision_context の構造
+
+impl agent（livewire/artisan）に渡す場合:
+```json
+{
+  "revision_context": {
+    "source_test_spec_id": 84,
+    "failures": [
+      {
+        "scenario": "login-validation",
+        "blame": "code",
+        "type": "element_missing",
+        "error": "Locator('.validation-errors') not found",
+        "evidence": "Blade テンプレートに validation-errors クラスの要素がない",
+        "app_files": ["resources/pages/auth/login.blade.php"],
+        "suggested_fix": "バリデーションエラー表示に .validation-errors クラスを追加"
+      }
+    ]
+  }
+}
+```
+
+tester に再渡しする場合:
+```json
+{
+  "revision_context": {
+    "attempt": 2,
+    "previous_failures": [
+      {
+        "scenario": "login-validation",
+        "blame": "test",
+        "type": "selector_mismatch",
+        "error": "Locator('.text-error') not found",
+        "actual": "実際のクラスは .alert.alert-error",
+        "suggested_fix": "セレクタを .alert.alert-error に変更"
+      }
+    ]
+  }
+}
+```
 
 ---
 

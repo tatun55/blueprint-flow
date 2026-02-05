@@ -33,8 +33,23 @@ DB="blueprint/blueprint.db"
 | ui/* | livewire | `livewireとして実行: spec_id={id}` |
 | action/* | artisan | `artisanとして実行: spec_id={id}` |
 | test/* | tester | `testerとして実行: spec_id={id}` |
+| blueprint-flow設定 | blueprint-flow | `blueprint-flowとして実行: {指示}` |
 
 Task tool: subagent_type="general-purpose", run_in_background=true
+
+## Blueprint-Flow 参照
+
+| 項目 | パス |
+|------|------|
+| 設計書 | `.blueprint-flow/BLUEPRINT_FLOW.md` |
+| スタック設定 | `.blueprint-flow/.claude.tall-daisy/` |
+| Agent定義 | `.blueprint-flow/.claude.tall-daisy/agents/` |
+| Skill定義 | `.blueprint-flow/.claude.tall-daisy/skills/` |
+| 同期スクリプト | `.blueprint-flow/scripts/update.sh` |
+| Blueprint DB | `blueprint/blueprint.db` |
+
+**`.claude/` の全ファイルは `.blueprint-flow/.claude.tall-daisy/` へのシンボリックリンク。**
+blueprint-flow の設定変更は `.blueprint-flow/` 配下を直接編集する。
 
 ## Status管理
 
