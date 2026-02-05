@@ -73,7 +73,7 @@ CREATE TABLE spec_dependencies (
 | action | sync, async, scheduled | Action, Job, Command |
 | test | unit, feature, e2e | テスト設計（level 1-3） |
 
-### Test Spec 構造
+### Test Spec 構造（E2E）
 
 ```json
 {
@@ -81,36 +81,66 @@ CREATE TABLE spec_dependencies (
   "depends_on": ["ui/pages/todo-index"],
   "target": {
     "type": "page",
-    "url": "/",
-    "component": "App\\Livewire\\Pages\\TodoIndex"
+    "url": "/todos",
+    "component": "App\\Pages\\TodoIndex"
   },
+  "screenshot_prefix": "050-todo",
   "scenarios": [
     {
       "name": "page-load",
-      "description": "ページが正しく表示される",
+      "description": "Todoページが正しく表示される",
+      "auth": 3,
+      "steps": [
+        { "action": "goto", "url": "/todos" },
+        { "action": "wait", "state": "networkidle" }
+      ],
       "assertions": [
-        "h1要素が表示される",
-        "タスク一覧が表示される"
+        { "type": "visible", "selector": "h1", "text": "タスク一覧" },
+        { "type": "visible", "selector": ".task-list" },
+        { "type": "count", "selector": ".task-item", "min": 1 }
+      ],
+      "screenshots": [
+        { "state": "list", "description": "タスク一覧ページ全体", "fullPage": true }
       ]
     },
     {
       "name": "add-task",
-      "description": "タスクを追加できる",
+      "description": "新しいタスクを追加できる",
+      "auth": 3,
       "steps": [
-        "入力欄に「新しいタスク」を入力",
-        "追加ボタンをクリック"
+        { "action": "goto", "url": "/todos" },
+        { "action": "fill", "selector": "input[wire\\:model='newTask']", "value": "新しいタスク" },
+        { "action": "click", "selector": "button:has-text('追加')" },
+        { "action": "wait", "state": "networkidle" }
       ],
       "assertions": [
-        "新しいタスクが一覧に表示される",
-        "入力欄がクリアされる"
+        { "type": "visible", "selector": ".task-item", "text": "新しいタスク" },
+        { "type": "value", "selector": "input[wire\\:model='newTask']", "expected": "" }
+      ],
+      "screenshots": [
+        { "state": "added", "description": "タスク追加後の一覧", "fullPage": true }
       ]
     }
-  ],
-  "required_data": [
-    {"_comment": "完了状態テスト用", "title": "完了タスク", "completed": true}
   ]
 }
 ```
+
+### Scenario フィールド定義
+
+| フィールド | 必須 | 説明 |
+|-----------|------|------|
+| `name` | Yes | シナリオ識別子（kebab-case） |
+| `description` | Yes | 何をテストするか（テスト名になる） |
+| `auth` | No | ログインユーザーID（1=superadmin, 2=admin, 3=user1, 4=user2）。省略時=未認証 |
+| `steps` | No | 操作手順の配列。action + selector/url/value で記述 |
+| `assertions` | Yes | 検証項目の配列。type + selector/text/expected で記述 |
+| `screenshots` | No | スクショ定義。state（ファイル名suffix）+ description + fullPage |
+
+### Screenshot パス規則
+
+`tests/e2e/screenshots/{screenshot_prefix}-{state}.png`
+
+例: `screenshot_prefix: "050-todo"`, `state: "list"` → `tests/e2e/screenshots/050-todo-list.png`
 
 **Test Levels:**
 
@@ -234,11 +264,12 @@ UPDATE specs SET human_reviewed = 'none' WHERE id IN (SELECT id FROM deps)
 4. 依存関係を解決して実装順序を決定
 5. 対象 spec の status を 'in_progress'、working_by を agent 名に更新
 6. Agents を background で並列起動（spec ID を渡す）
+   - tester はコード作成のみ（テスト実行しない）
 7. Agent 結果を確認し、status を更新:
    - 成功 → 'impl_review', working_by = NULL
    - 失敗 → 'needs_revision', working_by = NULL, revision_count++, revision_reason 記録
-   - 対応する test spec も同様に更新
-8. 失敗があれば修正サイクル
+8. テスト一括実行: `npx playwright test --reporter=line`
+9. 失敗があれば修正サイクル（Hub がエラーを分析してルーティング）
 ```
 
 ### Status 管理責務（CRITICAL）
@@ -454,12 +485,13 @@ sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"
 ## Agent 4: `tester`
 
 ### 役割
-テストコード作成・実行の専門家
+テストコード作成の専門家（実行はしない）
 
-**テスト設計は /bpf が spec として定義済み。tester はコード作成と実行のみ。**
+**テスト設計は /bpf が spec として定義済み。tester はコード作成のみ。**
+**テスト実行は Hub が `npx playwright test` で一括実行する。**
 
 ### 入力
-spec_id (test/unit, test/feature, test/e2e) を受け取り、テストコードを作成・実行
+spec_id (test/unit, test/feature, test/e2e) を受け取り、テストコードを作成
 
 ### 最初に実行すること
 ```bash

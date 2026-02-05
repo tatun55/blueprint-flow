@@ -113,7 +113,7 @@ Types:
   - test: unit, feature, e2e (level 1-3)
 ```
 
-### Test Spec 構造
+### Test Spec 構造（E2E）
 
 ```json
 {
@@ -121,27 +121,66 @@ Types:
   "depends_on": ["ui/pages/todo-index"],
   "target": {
     "type": "page",
-    "url": "/",
-    "component": "App\\Livewire\\Pages\\TodoIndex"
+    "url": "/todos",
+    "component": "App\\Pages\\TodoIndex"
   },
+  "screenshot_prefix": "050-todo",
   "scenarios": [
     {
       "name": "page-load",
-      "description": "ページが正しく表示される",
-      "assertions": ["h1要素が表示される", "タスク一覧が表示される"]
+      "description": "Todoページが正しく表示される",
+      "auth": 3,
+      "steps": [
+        { "action": "goto", "url": "/todos" },
+        { "action": "wait", "state": "networkidle" }
+      ],
+      "assertions": [
+        { "type": "visible", "selector": "h1", "text": "タスク一覧" },
+        { "type": "visible", "selector": ".task-list" },
+        { "type": "count", "selector": ".task-item", "min": 1 }
+      ],
+      "screenshots": [
+        { "state": "list", "description": "タスク一覧ページ全体", "fullPage": true }
+      ]
     },
     {
       "name": "add-task",
-      "description": "タスクを追加できる",
-      "steps": ["入力欄に「新しいタスク」を入力", "追加ボタンをクリック"],
-      "assertions": ["新しいタスクが一覧に表示される", "入力欄がクリアされる"]
+      "description": "新しいタスクを追加できる",
+      "auth": 3,
+      "steps": [
+        { "action": "goto", "url": "/todos" },
+        { "action": "fill", "selector": "input[wire\\:model='newTask']", "value": "新しいタスク" },
+        { "action": "click", "selector": "button:has-text('追加')" },
+        { "action": "wait", "state": "networkidle" }
+      ],
+      "assertions": [
+        { "type": "visible", "selector": ".task-item", "text": "新しいタスク" },
+        { "type": "value", "selector": "input[wire\\:model='newTask']", "expected": "" }
+      ],
+      "screenshots": [
+        { "state": "added", "description": "タスク追加後の一覧", "fullPage": true }
+      ]
     }
-  ],
-  "required_data": [
-    {"_comment": "完了状態テスト用", "title": "完了タスク", "completed": true}
   ]
 }
 ```
+
+### Scenario フィールド定義
+
+| フィールド | 必須 | 説明 |
+|-----------|------|------|
+| `name` | Yes | シナリオ識別子（kebab-case） |
+| `description` | Yes | 何をテストするか（テスト名になる） |
+| `auth` | No | ログインユーザーID（1=superadmin, 2=admin, 3=user1, 4=user2）。省略時=未認証 |
+| `steps` | No | 操作手順の配列。action + selector/url/value で記述 |
+| `assertions` | Yes | 検証項目の配列。type + selector/text/expected で記述 |
+| `screenshots` | No | スクショ定義。state（ファイル名suffix）+ description + fullPage |
+
+### Screenshot パス規則
+
+`tests/e2e/screenshots/{screenshot_prefix}-{state}.png`
+
+例: `screenshot_prefix: "050-todo"`, `state: "list"` → `tests/e2e/screenshots/050-todo-list.png`
 
 **Test Levels:**
 
@@ -190,7 +229,47 @@ INSERT INTO specs (category, type, slug, name, data) VALUES (
 ```sql
 INSERT INTO specs (category, type, slug, name, data) VALUES (
   'test', 'e2e', 'todo-index', 'Todoページ E2Eテスト',
-  '{"level":1,"depends_on":["ui/pages/todo-index"],"target":{"type":"page","url":"/","component":"App\\Livewire\\Pages\\TodoIndex"},"scenarios":[{"name":"page-load","description":"ページが正しく表示される","assertions":["h1要素が表示される","タスク一覧が表示される"]},{"name":"add-task","description":"タスクを追加できる","steps":["入力欄に「新しいタスク」を入力","追加ボタンをクリック"],"assertions":["新しいタスクが一覧に表示される"]}],"required_data":[]}'
+  json('{
+    "level": 1,
+    "depends_on": ["ui/pages/todo-index"],
+    "target": {"type": "page", "url": "/todos", "component": "App\\Pages\\TodoIndex"},
+    "screenshot_prefix": "050-todo",
+    "scenarios": [
+      {
+        "name": "page-load",
+        "description": "Todoページが正しく表示される",
+        "auth": 3,
+        "steps": [
+          {"action": "goto", "url": "/todos"},
+          {"action": "wait", "state": "networkidle"}
+        ],
+        "assertions": [
+          {"type": "visible", "selector": "h1", "text": "タスク一覧"},
+          {"type": "visible", "selector": ".task-list"}
+        ],
+        "screenshots": [
+          {"state": "list", "description": "タスク一覧ページ全体", "fullPage": true}
+        ]
+      },
+      {
+        "name": "add-task",
+        "description": "新しいタスクを追加できる",
+        "auth": 3,
+        "steps": [
+          {"action": "goto", "url": "/todos"},
+          {"action": "fill", "selector": "input[wire\\\\:model=newTask]", "value": "新しいタスク"},
+          {"action": "click", "selector": "button:has-text(追加)"},
+          {"action": "wait", "state": "networkidle"}
+        ],
+        "assertions": [
+          {"type": "visible", "selector": ".task-item", "text": "新しいタスク"}
+        ],
+        "screenshots": [
+          {"state": "added", "description": "タスク追加後の一覧", "fullPage": true}
+        ]
+      }
+    ]
+  }')
 );
 ```
 
@@ -338,80 +417,87 @@ Task(subagent_type="general-purpose", prompt="artisanとして実行: spec_id=4"
   </step>
 
   <step name="3-launch-tester">
-    <action>tester を background で起動</action>
+    <action>tester を background で起動（コード作成のみ、実行しない）</action>
     <prompt>testerとして実行: spec_id={id}</prompt>
+    <note>tester はテストコードを作成して報告する。テストは実行しない。</note>
   </step>
 
-  <step name="4-review-results">
-    <action>テスト結果を確認（tester の構造化報告を読む）</action>
+  <step name="4-batch-execute">
+    <action>Hub が npx playwright test で一括実行</action>
+    <commands>
+      npx playwright test --reporter=line            # 全テスト
+      npx playwright test tests/e2e/{slug}.spec.ts   # 単一ファイル
+    </commands>
+    <note>
+      全テストを一括実行するため、テスト間の干渉を検出しやすい。
+      per-worker DB分離により各 worker が独立した DB を持つ。
+    </note>
+  </step>
+
+  <step name="5-review-results">
+    <action>テスト結果を確認し、失敗があれば修正サイクルへ</action>
     <on-success>spec status を impl_review に更新</on-success>
     <on-failure>
-      tester の失敗診断の blame に基づいて修正サイクル（3層判断システム）へルーティング:
-      - blame=test（自己修正済み・成功） → 対応不要
-      - blame=test（自己修正失敗） → Tier 2: revision_context を test spec に書き込み → tester 再実行
-      - blame=code → Tier 2: revision_context を impl spec に書き込み → livewire/artisan 起動
-      - blame=unknown → Tier 3: ユーザーにスクショ+診断を提示して判断を仰ぐ
+      Hub がエラー出力を分析して修正ルートを判断:
+      - selector/content/timing の問題 → revision_context を test spec に書き込み → tester 再起動
+      - element_missing/server_error → revision_context を impl spec に書き込み → livewire/artisan 起動
+      - 判断困難 → ユーザーにエラー内容を提示して判断を仰ぐ
     </on-failure>
   </step>
 </test-orchestration>
 
 ---
 
-## 修正サイクル（3層判断システム）
+## 修正サイクル
 
-tester agent の報告には各失敗の **blame**（test/code/unknown）が含まれる。
-Hub は blame に基づいて機械的にルーティングする。
+Hub がテスト実行結果を分析し、失敗の原因に基づいてルーティングする。
 
 <revision-cycle>
-  <trigger>tester agent が失敗を報告</trigger>
+  <trigger>npx playwright test で失敗が発生</trigger>
 
-  <tier name="1-tester-self-fix" label="Tier 1: tester 自己修正（自動）">
-    <condition>blame=test かつ高確信度</condition>
-    <action>tester が自動で修正・再実行済み。成功していれば対応不要。</action>
-    <note>tester の報告に「自己修正: あり」と記載される。失敗診断セクションがなければ成功。</note>
-  </tier>
-
-  <tier name="2-impl-agent-diagnosis" label="Tier 2: 実装 agent に診断・修正を委譲">
-    <condition>blame=code、または blame=test だが tester 自己修正で再失敗</condition>
+  <route name="test-fix" label="テストコード修正">
+    <condition>selector 不一致、content 不一致、timing 問題</condition>
     <action>
-      1. tester の失敗診断（エラー・根拠・修正提案）を revision_context として
-         対象 spec の data に書き込む
-      2. blame=code → 対応する ui/action spec を特定し、livewire/artisan agent を起動
-         blame=test（再失敗）→ test spec に revision_context を書き込み、tester を再起動
+      1. 失敗内容を revision_context として test spec の data に書き込む
+      2. tester を再起動してテストコードを修正させる
     </action>
-    <hub-commands>
-      <!-- blame=code の場合: impl spec に revision_context を追加して agent 起動 -->
-      sqlite3 $DB "UPDATE specs SET
-        data = json_set(data, '$.revision_context', json('{
-          \"source_test_spec_id\": {test_spec_id},
-          \"failures\": [{tester の失敗診断をそのまま転記}]
-        }')),
-        status = 'in_progress',
-        working_by = 'livewire'
-        WHERE id = {impl_spec_id}"
-
-      <!-- blame=test（再失敗）の場合: test spec に revision_context を追加 -->
+    <hub-command>
       sqlite3 $DB "UPDATE specs SET
         data = json_set(data, '$.revision_context', json('{
           \"attempt\": 2,
-          \"previous_failures\": [{tester の失敗診断をそのまま転記}]
+          \"previous_failures\": [{エラー内容}]
         }')),
         status = 'in_progress',
         working_by = 'tester'
         WHERE id = {test_spec_id}"
-    </hub-commands>
-  </tier>
+    </hub-command>
+  </route>
 
-  <tier name="3-user-judgment" label="Tier 3: ユーザー判断">
-    <condition>blame=unknown、または Tier 2 でも解決しない場合</condition>
+  <route name="impl-fix" label="実装コード修正">
+    <condition>要素が Blade に存在しない、サーバーエラー、ロジック不整合</condition>
     <action>
-      ユーザーに以下を提示して判断を仰ぐ:
-      1. 失敗スクリーンショット（tests/e2e/screenshots/ または test-results/）
-      2. tester の失敗診断（エラー・根拠・修正提案）
-      3. 関連する app コードのパス（tester の根拠に記載）
+      1. 失敗内容を revision_context として impl spec の data に書き込む
+      2. livewire/artisan を起動して実装を修正させる
+    </action>
+    <hub-command>
+      sqlite3 $DB "UPDATE specs SET
+        data = json_set(data, '$.revision_context', json('{
+          \"source_test_spec_id\": {test_spec_id},
+          \"failures\": [{エラー内容}]
+        }')),
+        status = 'in_progress',
+        working_by = 'livewire'
+        WHERE id = {impl_spec_id}"
+    </hub-command>
+  </route>
+
+  <route name="user-judgment" label="ユーザー判断">
+    <condition>原因が判断困難、または修正サイクル2回以上失敗</condition>
+    <action>
+      ユーザーにエラー内容を提示して判断を仰ぐ:
       AskUserQuestion で「テスト修正 / アプリ修正 / 仕様変更」を選択させる
     </action>
-  </tier>
+  </route>
 </revision-cycle>
 
 ### revision_context の構造
@@ -424,10 +510,7 @@ impl agent（livewire/artisan）に渡す場合:
     "failures": [
       {
         "scenario": "login-validation",
-        "blame": "code",
-        "type": "element_missing",
         "error": "Locator('.validation-errors') not found",
-        "evidence": "Blade テンプレートに validation-errors クラスの要素がない",
         "app_files": ["resources/pages/auth/login.blade.php"],
         "suggested_fix": "バリデーションエラー表示に .validation-errors クラスを追加"
       }
@@ -444,10 +527,7 @@ tester に再渡しする場合:
     "previous_failures": [
       {
         "scenario": "login-validation",
-        "blame": "test",
-        "type": "selector_mismatch",
-        "error": "Locator('.text-error') not found",
-        "actual": "実際のクラスは .alert.alert-error",
+        "error": "Locator('.text-error') not found — actual class is .alert.alert-error",
         "suggested_fix": "セレクタを .alert.alert-error に変更"
       }
     ]
