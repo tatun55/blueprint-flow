@@ -131,10 +131,12 @@ CREATE TABLE spec_dependencies (
 |-----------|------|------|
 | `name` | Yes | シナリオ識別子（kebab-case） |
 | `description` | Yes | 何をテストするか（テスト名になる） |
-| `auth` | No | ログインユーザーID（1=superadmin, 2=admin, 3=user1, 4=user2）。省略時=未認証 |
-| `steps` | No | 操作手順の配列。action + selector/url/value で記述 |
-| `assertions` | Yes | 検証項目の配列。type + selector/text/expected で記述 |
-| `screenshots` | No | スクショ定義。state（ファイル名suffix）+ description + fullPage |
+| `auth` | Yes | ログインユーザーID（1=superadmin, 2=admin, 3=user1, 4=user2）。未認証は `null` |
+| `steps` | Yes | 操作手順の**オブジェクト配列** `[{action, selector, url, value}, ...]`。文字列配列は禁止 |
+| `assertions` | Yes | 検証項目の**オブジェクト配列** `[{type, selector, text}, ...]`。文字列は禁止 |
+| `screenshots` | Yes | スクショ定義の**オブジェクト配列** `[{state, description, fullPage}, ...]` |
+
+**CRITICAL**: 全フィールドをオブジェクト配列で記述すること。文字列配列は tester が解釈できない。
 
 ### Screenshot パス規則
 

@@ -171,10 +171,13 @@ Types:
 |-----------|------|------|
 | `name` | Yes | シナリオ識別子（kebab-case） |
 | `description` | Yes | 何をテストするか（テスト名になる） |
-| `auth` | No | ログインユーザーID（1=superadmin, 2=admin, 3=user1, 4=user2）。省略時=未認証 |
-| `steps` | No | 操作手順の配列。action + selector/url/value で記述 |
-| `assertions` | Yes | 検証項目の配列。type + selector/text/expected で記述 |
-| `screenshots` | No | スクショ定義。state（ファイル名suffix）+ description + fullPage |
+| `auth` | Yes | ログインユーザーID（1=superadmin, 2=admin, 3=user1, 4=user2）。未認証は `null` |
+| `steps` | Yes | 操作手順の**オブジェクト配列** `[{action, selector, url, value}, ...]`。文字列配列は禁止 |
+| `assertions` | Yes | 検証項目の**オブジェクト配列** `[{type, selector, text}, ...]`。文字列は禁止 |
+| `screenshots` | Yes | スクショ定義の**オブジェクト配列** `[{state, description, fullPage}, ...]` |
+
+**CRITICAL**: `steps`, `assertions`, `screenshots` は必ずオブジェクト配列で記述する。
+文字列配列（`["ページ表示", "ボタンクリック"]`）で書くと tester agent がセレクタを推測することになり、テスト品質が低下する。
 
 ### Screenshot パス規則
 
@@ -337,6 +340,15 @@ specが0件の場合:
       <sub-step name="4e-e2e-tests">
         <action>test/e2e spec を作成（Level 1: 基本シナリオ）</action>
         <method>AskUserQuestion でE2Eシナリオを確認</method>
+        <critical>
+          必ず enriched フォーマットで作成すること（下記 test/e2e テンプレート参照）:
+          - screenshot_prefix: "{spec_id_3桁}-{slug}" 形式で必須
+          - scenarios[].auth: ユーザーID (number) or null
+          - scenarios[].steps: オブジェクト配列 [{action, selector, url, value}, ...]
+          - scenarios[].assertions: オブジェクト配列 [{type, selector, text}, ...]
+          - scenarios[].screenshots: オブジェクト配列 [{state, description, fullPage}, ...]
+          文字列配列の steps/assertions は禁止（tester agent が解釈できない）
+        </critical>
       </sub-step>
     </for-each>
   </step>
