@@ -130,7 +130,7 @@ EOF
 # Update resources/css/app.css for Tailwind 4
 cat > resources/css/app.css << 'EOF'
 @import "tailwindcss";
-@config "../tailwind.config.js";
+@config "../../tailwind.config.js";
 EOF
 
 # Update vite.config.js for Tailwind 4

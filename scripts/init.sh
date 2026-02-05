@@ -88,6 +88,15 @@ if [[ ! -f "$TARGET_DIR/CLAUDE.md" ]]; then
 CLAUDE_EOF
 fi
 
+# Fix Tailwind CSS config path for tall-daisy stack
+CSS_FILE="$TARGET_DIR/resources/css/app.css"
+if [[ "$STACK" == "tall-daisy" && -f "$CSS_FILE" ]]; then
+    if grep -q '@config "\.\./tailwind\.config\.js"' "$CSS_FILE"; then
+        echo "Fixing Tailwind @config path in app.css..."
+        sed -i '' 's|@config "\.\./tailwind\.config\.js"|@config "../../tailwind.config.js"|' "$CSS_FILE"
+    fi
+fi
+
 # Store stack and version info
 echo "$STACK" > "$TARGET_DIR/.blueprint-flow-stack"
 git -C "$BLUEPRINT_FLOW_DIR" rev-parse HEAD 2>/dev/null > "$TARGET_DIR/.blueprint-flow-version" || echo "dev" > "$TARGET_DIR/.blueprint-flow-version"
