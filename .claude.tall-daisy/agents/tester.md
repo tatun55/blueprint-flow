@@ -103,6 +103,13 @@ GET /e2e-login/{userId}
     - scenario.steps → 操作手順（selector ヒントがあればそのまま使う）
     - scenario.assertions → expect() 文
     - scenario.screenshots → page.screenshot() 呼び出し（path と fullPage を指定）
+
+    **CRITICAL: spec との 1:1 対応を厳守する:**
+    - テスト数 = spec.scenarios の数（多くても少なくてもダメ）
+    - スクショ数 = 全 scenarios[].screenshots の合計数
+    - spec にないシナリオを追加してはならない
+    - spec にあるシナリオを省略してはならない
+    - テストを追加したい場合は報告に「追加提案」として記載する（実装はしない）
   </step>
 
   <step name="4-report">
@@ -228,13 +235,21 @@ test('{scenario.description}', function () {
 ## 結果: テストコード作成完了
 
 - テストファイル: tests/e2e/{slug}.spec.ts
-- テスト数: {n}
-- スクリーンショット定義: {n}枚
 - 変更種別: 新規作成 | revision修正
 
-### テスト一覧
-- {test_name}: {description}
+### Spec 整合性チェック
+| 項目 | Spec定義 | 実テスト | 一致 |
+|------|---------|---------|------|
+| シナリオ数 | {n} | {n} | ✅/❌ |
+| スクショ数 | {n} | {n} | ✅/❌ |
 
-### スクリーンショット一覧
-- {file_path}: {description}
+### テスト一覧（spec.scenarios との対応）
+| Spec scenario.name | テスト名 | スクショ |
+|-------------------|---------|---------|
+| {name} | {test_title} | {screenshot_files} |
+
+### 追加提案（任意）
+- spec に含まれていないが追加すべきシナリオがあれば記載
 ```
+
+**CRITICAL**: 整合性チェックが ❌ の場合、tester はテストコードを修正して ✅ にしてから報告すること。

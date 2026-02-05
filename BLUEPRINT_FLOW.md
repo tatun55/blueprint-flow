@@ -510,6 +510,17 @@ sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"
 | feature | `tests/Feature/{path}/{Name}Test.php` |
 | e2e | `tests/e2e/{slug}.spec.ts` + スクリーンショット |
 
+### Spec ↔ テスト 1:1 対応ルール（CRITICAL）
+
+tester は spec.scenarios と **完全に 1:1 対応** するテストコードを作成する:
+
+- テスト数 = spec.scenarios の数（多くても少なくてもダメ）
+- スクショ数 = 全 scenarios[].screenshots の合計数
+- spec にないシナリオを追加してはならない
+- テストを追加すべき場合は報告に「追加提案」として記載（実装しない）
+
+Hub は tester 完了後に整合性を検証し、ズレがあれば spec 更新 or tester 再実行を行う。
+
 ### E2E Per-Worker DB 分離
 
 各 Playwright worker が独自の SQLite DB + artisan serve サーバーを持つ:

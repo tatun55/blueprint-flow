@@ -434,7 +434,23 @@ Task(subagent_type="general-purpose", prompt="artisanとして実行: spec_id=4"
     <note>tester はテストコードを作成して報告する。テストは実行しない。</note>
   </step>
 
-  <step name="4-batch-execute">
+  <step name="4-verify-spec-alignment">
+    <action>tester 完了後、spec ↔ テストコードの整合性を検証</action>
+    <checks>
+      1. テスト数 = spec.scenarios の数
+      2. スクショ数 = 全 scenarios[].screenshots の合計数
+      3. スクショファイル名が {screenshot_prefix}-{state}.png の規則に従う
+    </checks>
+    <on-mismatch>
+      - tester が spec にないテストを追加していた場合:
+        a) 追加テストが有用なら spec を更新して scenarios を追加
+        b) 不要なら tester に revision_context で修正を指示
+      - tester が spec のシナリオを省略していた場合:
+        revision_context で不足シナリオを指示して tester を再起動
+    </on-mismatch>
+  </step>
+
+  <step name="5-batch-execute">
     <action>Hub が npx playwright test で一括実行</action>
     <commands>
       npx playwright test --reporter=line            # 全テスト
@@ -446,7 +462,7 @@ Task(subagent_type="general-purpose", prompt="artisanとして実行: spec_id=4"
     </note>
   </step>
 
-  <step name="5-review-results">
+  <step name="6-review-results">
     <action>テスト結果を確認し、失敗があれば修正サイクルへ</action>
     <on-success>spec status を impl_review に更新</on-success>
     <on-failure>
