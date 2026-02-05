@@ -4,6 +4,15 @@
 
 **テスト設計は /bpf が spec として定義済み。tester はコード作成と実行のみ。**
 
+## 安全性制約（CRITICAL — 違反は即失敗）
+
+1. **blueprint/ ディレクトリを絶対に削除・変更するな** — DB ファイルを含む重要ディレクトリ
+2. **tests/ 配下のみ作成・変更可能** — それ以外のファイルは読み取り専用
+3. **playwright-mcp（MCP ツール）を使うな** — E2E は `@playwright/test` フレームワークのみ
+4. **`migrate:fresh` を実行するな** — 並列テスト時にデータを破壊する
+5. **AskUserQuestion を使うな** — 必要な情報は全て spec に含まれている
+6. **status 更新するな** — Hub が行う。agent は結果を報告するのみ
+
 ## 入力
 
 spec_id (test/unit, test/feature, test/e2e) を受け取り、テストコードを作成・実行
@@ -18,259 +27,162 @@ testerとして実行: spec_id={id}
 DB="blueprint/blueprint.db"
 
 # プロジェクト概要を把握
-sqlite3 -json $DB "SELECT * FROM specs WHERE category='core' AND type='overview'"
+sqlite3 -json $DB "SELECT data FROM specs WHERE category='core' AND type='overview'"
 
 # 対象の test spec を取得
 sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"
 
-# depends_on から対象の ui/pages または action spec を取得
+# E2E の場合: 期待するスクリーンショット一覧を取得
+sqlite3 -json $DB "SELECT scenario, state, description, file_path FROM e2e_screenshots WHERE spec_id = {spec_id}"
+
+# APP_URL を取得
+grep APP_URL .env | cut -d '=' -f2
 ```
 
 ---
 
-## E2E テスト実行（CRITICAL）
+## E2E テスト（@playwright/test）
 
-### playwright-mcp を使用する（headless モード）
+### フレームワーク
 
-**Playwright をインストールしてはいけない。playwright-mcp が MCP サーバーとして利用可能。**
+**`@playwright/test` を使用する。playwright-mcp（MCP ツール）は絶対に使わない。**
 
-デフォルト設定（~/.claude/CLAUDE.md で定義済み）:
-- `headless: true` - ブラウザUIを表示しない
-- `savePng: true` - スクリーンショットをPNG保存
-- `downloadsDir`: プロジェクトルート
+- テストファイル: `tests/e2e/{slug}.spec.ts`
+- スクリーンショット: `tests/e2e/screenshots/`
+- 設定: `playwright.config.ts`（プロジェクトルート、変更不要）
+- 実行: `npx playwright test tests/e2e/{slug}.spec.ts`
+
+### テスト認証
+
+アプリには E2E 用ログインルートがある:
 
 ```
-mcp__playwright-mcp__playwright_navigate  # URL遷移 (headless: true)
-mcp__playwright-mcp__playwright_screenshot # スクショ取得 (savePng: true)
-mcp__playwright-mcp__playwright_click     # クリック
-mcp__playwright-mcp__playwright_fill      # 入力
-mcp__playwright-mcp__playwright_get_visible_text # テキスト取得
-mcp__playwright-mcp__playwright_close     # 終了時は必ず閉じる
+GET /e2e-login/{userId}
 ```
 
-### APP_URL でアクセス可能
+テスト内でこのルートに navigate してセッション認証を取得する。
 
-アプリは Valet で動作中。`.env` の `APP_URL` でアクセスできる。
+### シーダーユーザー
 
-```bash
-APP_URL=$(grep APP_URL .env | cut -d '=' -f2)
-# 例: http://my-todo-app-2026-02-03-v5.test
-```
+| ユーザー | ID | 役割 |
+|---------|------|------|
+| superadmin@example.com | 1 | スーパー管理者 |
+| admin1@example.com | 2 | 組織管理者 |
+| user1@example.com | 3 | 一般ユーザー |
 
-### テスト用API・エンドポイントは作成しない
-
-- シーダーでテストデータが投入済み
-- 実際のアプリにブラウザでアクセスしてテスト
-- データリセットが必要なら `php artisan migrate:fresh --seed`
-
----
-
-## E2E テスト実行フロー（CRITICAL: 状態ごとにスクショ必須）
+### E2E テスト作成・実行フロー
 
 <e2e-test-flow>
-  <principle>
-    playwright-mcp でブラウザ操作。テストコードファイルは作成しない。
-    APP_URL でアプリにアクセスし、spec.scenarios を順次実行。
-    **各シナリオの各状態でスクリーンショットを撮影し、後で人がチェックできるようにする。**
-    **AskUserQuestion は使用しない。必要な情報は全て spec に含まれている。**
-  </principle>
-
-  <step name="1-get-spec">
-    <action>test spec を取得</action>
-    <command>sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"</command>
-    <extract>level, depends_on, target, scenarios</extract>
+  <step name="1-read-spec">
+    spec と e2e_screenshots テーブルを読み取り
   </step>
 
-  <step name="2-get-app-url">
-    <action>APP_URL を取得</action>
-    <command>grep APP_URL .env | cut -d '=' -f2</command>
+  <step name="2-read-related-pages">
+    spec の scenarios に関連する ui/pages spec の data を読んで、
+    ページ URL・コンポーネント構成・使用可能な操作を把握する
   </step>
 
-  <step name="3-prepare">
-    <action>スクリーンショット保存先を作成</action>
-    <command>mkdir -p tests/Browser/screenshots/{slug}</command>
+  <step name="3-create-test-file">
+    `tests/e2e/{slug}.spec.ts` を作成。
+    e2e_screenshots の定義に従い、各シナリオの各状態でスクリーンショットを撮影する。
+    **file_path は e2e_screenshots テーブルの値を正確に使用する。**
   </step>
 
-  <step name="4-reset-data">
-    <action>テストデータをリセット</action>
-    <command>php artisan migrate:fresh --seed</command>
-    <note>毎回クリーンな状態からテストを開始</note>
+  <step name="4-run-test">
+    `npx playwright test tests/e2e/{slug}.spec.ts` で実行
+    失敗したら原因を調査し、テストコードを修正して再実行（最大3回）
   </step>
 
-  <step name="5-execute-scenarios">
-    <action>各 scenario を playwright-mcp で実行し、状態ごとにスクショ+説明を保存</action>
-    <note>screenshots 配列を構築し、最後に manifest.json として書き出す。</note>
-    <for-each scenario="scenarios">
-      <sub-step>navigate: APP_URL + target.url にアクセス</sub-step>
-      <sub-step>screenshot: 操作前スクショを撮影 → screenshots 配列に追加
-        { "file": "00-{scenario}-initial.png", "description": "ページロード直後" }
-      </sub-step>
-      <sub-step>execute: scenario.steps を実行</sub-step>
-      <sub-step>screenshot: 操作後スクショを撮影 → screenshots 配列に追加
-        { "file": "01-{scenario}-after.png", "description": "タスク追加後の一覧" }
-      </sub-step>
-      <sub-step>verify: scenario.assertions を確認</sub-step>
-    </for-each>
-  </step>
-
-  <step name="6-close-browser">
-    <action>ブラウザを閉じる</action>
-    <command>mcp__playwright-mcp__playwright_close</command>
-  </step>
-
-  <step name="7-save-manifest">
-    <action>manifest.json を書き出し</action>
-    <note>Write tool で tests/Browser/screenshots/{slug}/manifest.json を作成</note>
-    <format>
-    {
-      "slug": "{slug}",
-      "spec_id": {spec_id},
-      "tested_at": "ISO8601",
-      "result": "passed|failed",
-      "screenshots": [
-        { "file": "00-initial.png", "description": "ページロード直後" },
-        { "file": "01-add-task-after.png", "description": "タスク追加後の一覧" }
-      ]
-    }
-    </format>
-  </step>
-
-  <step name="8-report">
-    <action>テスト結果を報告（親agentへ返す）</action>
-    <content>
-      - シナリオ件数、成功/失敗、失敗詳細
-      - スクリーンショット一覧（description 付き、後で人がチェック可能）
-    </content>
-    <note>status 更新は /bpf が行う。agent は結果を報告するのみ。</note>
+  <step name="5-report">
+    結果を報告（成功/失敗、スクリーンショット一覧、失敗詳細）
   </step>
 </e2e-test-flow>
 
----
+### テストファイルテンプレート
 
-## スクリーンショット管理
+```typescript
+import { test, expect } from '@playwright/test';
 
-### 保存先
+const BASE_URL = 'http://nishikinomiya-dev2.pizza';
+const SCREENSHOT_DIR = 'tests/e2e/screenshots';
 
-`tests/Browser/screenshots/{slug}/`
-
-各 slug ディレクトリに:
-- `{NN}-{scenario}-{state}.png` — スクショ画像
-- `manifest.json` — スクショ一覧と description
-
-### 命名規則
-
-| Timing | Filename Pattern | Example |
-|--------|------------------|---------|
-| 初期状態 | `00-{scenario}-initial.png` | `00-page-load-initial.png` |
-| 操作後 | `{NN}-{scenario}-after.png` | `01-add-task-after.png` |
-| エラー時 | `{NN}-{scenario}-error.png` | `02-toggle-error.png` |
-
-### manifest.json（CRITICAL: テスト完了時に必ず作成）
-
-```json
-{
-  "slug": "todo-index",
-  "spec_id": 5,
-  "tested_at": "2026-02-05T12:00:00Z",
-  "result": "passed",
-  "screenshots": [
-    { "file": "00-page-load-initial.png", "description": "ページロード直後" },
-    { "file": "01-add-task-after.png", "description": "タスク追加後の一覧" }
-  ]
+// ログインヘルパー
+async function login(page, userId: number) {
+  await page.goto(`${BASE_URL}/e2e-login/${userId}`);
+  // ダッシュボードまたはリダイレクト先を待機
+  await page.waitForLoadState('networkidle');
 }
+
+test.describe('{spec_name}', () => {
+
+  test('{scenario_title}', async ({ page }) => {
+    // ログイン（必要な場合）
+    await login(page, 3); // user1
+
+    // ページ遷移
+    await page.goto(`${BASE_URL}/{path}`);
+    await page.waitForLoadState('networkidle');
+
+    // 表示確認
+    await expect(page.locator('body')).toBeVisible();
+
+    // スクリーンショット（e2e_screenshots.file_path に一致させる）
+    await page.screenshot({
+      path: '{file_path_from_db}',
+      fullPage: true
+    });
+  });
+
+});
 ```
 
-**必ず状態ごとにスクショを撮影し、manifest.json に description を記録する。**
+### スクリーンショット撮影ルール
 
----
+1. **e2e_screenshots テーブルの file_path に完全一致するパスで保存する**
+2. 各シナリオの各 state で1枚ずつ撮影
+3. `fullPage: true` で全体をキャプチャ
+4. Livewire 操作後は `page.waitForLoadState('networkidle')` で安定化してから撮影
 
-## playwright-mcp パターン集
+### Livewire 対応パターン
 
-### ページ遷移（headless: true がデフォルト）
+```typescript
+// Livewire 操作後の待機
+await page.click('button:has-text("保存")');
+await page.waitForLoadState('networkidle');
 
-```
-mcp__playwright-mcp__playwright_navigate({ url: "http://app.test/" })
-# headless: true は ~/.claude/CLAUDE.md でデフォルト設定済み
-```
+// wire:model 入力
+await page.fill('[wire\\:model="name"]', '新しい値');
 
-### 入力
+// wire:model.blur の場合は blur イベントも発火
+const input = page.locator('[wire\\:model\\.blur="email"]');
+await input.fill('test@example.com');
+await input.blur();
+await page.waitForLoadState('networkidle');
 
-```
-mcp__playwright-mcp__playwright_fill({ selector: "input[type='text']", value: "新しいタスク" })
-```
-
-### クリック
-
-```
-mcp__playwright-mcp__playwright_click({ selector: "button:has-text('追加')" })
-```
-
-### テキスト確認
-
-```
-mcp__playwright-mcp__playwright_get_visible_text()
-# 結果に期待するテキストが含まれるか確認
+// Livewire リクエスト完了待機（汎用）
+await page.waitForResponse(resp =>
+  resp.url().includes('/livewire/update') && resp.status() === 200
+);
 ```
 
-### スクリーンショット（状態ごとに撮影、最後に manifest.json）
-
-```
-# 初期状態のスクショ
-mcp__playwright-mcp__playwright_screenshot({
-  name: "00-page-load-initial",
-  savePng: true,
-  downloadsDir: "tests/Browser/screenshots/{slug}"
-})
-
-# 操作実行...
-
-# 操作後のスクショ
-mcp__playwright-mcp__playwright_screenshot({
-  name: "01-add-task-after",
-  savePng: true,
-  downloadsDir: "tests/Browser/screenshots/{slug}"
-})
-```
-
-テスト完了後、Write tool で `tests/Browser/screenshots/{slug}/manifest.json` を作成。
-
-### Livewire 更新待機
-
-Livewire操作後は少し待つ:
-```
-mcp__playwright-mcp__playwright_screenshot  # 待機代わりにスクショ
-```
-
-### ブラウザ終了（必須）
-
-```
-mcp__playwright-mcp__playwright_close()
-```
-
----
-
-## scenario → playwright-mcp 変換
-
-| Scenario Item | playwright-mcp |
-|---------------|----------------|
-| `steps: ["入力欄に「xxx」を入力"]` | `playwright_fill({ selector: "input", value: "xxx" })` |
-| `steps: ["追加ボタンをクリック"]` | `playwright_click({ selector: "button:has-text('追加')" })` |
-| `steps: ["チェックボックスをクリック"]` | `playwright_click({ selector: "input[type='checkbox']" })` |
-| `assertions: ["h1要素が表示される"]` | `get_visible_text` で h1 テキストを確認 |
-| `assertions: ["タスク一覧が表示される"]` | `get_visible_text` でタスク名を確認 |
-
----
-
-## Unit / Feature テスト
-
-Unit / Feature テストは従来通り Pest PHP で実行:
+### テスト実行コマンド
 
 ```bash
-# Unit テスト
-php artisan test tests/Unit/{path}/{Name}Test.php
+# 単一ファイル実行
+npx playwright test tests/e2e/{slug}.spec.ts
 
-# Feature テスト
-php artisan test tests/Feature/Livewire/{Component}Test.php
+# ログ付き実行（デバッグ）
+npx playwright test tests/e2e/{slug}.spec.ts --reporter=list
+```
+
+---
+
+## Feature テスト（Pest PHP）
+
+Feature テストは Pest PHP で作成・実行:
+
+```bash
+php artisan test tests/Feature/{path}/{Name}Test.php
 ```
 
 ### Feature テストテンプレート
@@ -293,3 +205,27 @@ test('{scenario.description}', function () {
 | 1 | 20-40% | 基本操作（ページ表示、主要アクション） |
 | 2 | 40-60% | 追加操作（フォーム、モーダル） |
 | 3 | 60%+ | 全状態・エッジケース（エラー、空状態） |
+
+---
+
+## 報告フォーマット
+
+テスト完了後、以下を報告:
+
+```
+## 結果: {passed|failed}
+
+- テストファイル: tests/e2e/{slug}.spec.ts
+- テスト数: {n}
+- 成功: {n} / 失敗: {n}
+- スクリーンショット: {n}枚
+
+### シナリオ結果
+- {scenario}: {passed|failed}
+
+### 失敗詳細（あれば）
+- {scenario}: {error_message}
+
+### スクリーンショット一覧
+- {file_path}: {description}
+```
