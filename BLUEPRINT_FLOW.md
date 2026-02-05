@@ -474,17 +474,25 @@ sqlite3 -json $DB "SELECT * FROM specs WHERE id = {spec_id}"
 |------|--------|
 | unit | `tests/Unit/{path}/{Name}Test.php` |
 | feature | `tests/Feature/{path}/{Name}Test.php` |
-| e2e | playwright-mcp で実行 + `e2e.db` にスクショ＋description を登録 |
+| e2e | playwright-mcp で実行 + `manifest.json` にスクショ＋description を保存 |
 
 ### E2E テスト方式
 
 テストコードファイルは作成しない。playwright-mcp でブラウザ操作し、各状態でスクリーンショットを撮影。
-スクショは `e2e.db` の `screenshots` テーブルに description（状態の説明）と step_order（順序）をセットで保存。
+スクショは `tests/Browser/screenshots/{slug}/` に保存し、同ディレクトリの `manifest.json` に description をセットで記録。
 
-```bash
-# スクショ登録: screenshot <run_id> <step_order> <description> <type> <path>
-./scripts/e2e-db-cli.sh screenshot $RUN_ID 0 'ページロード直後' actual tests/e2e/screenshots/{slug}/00-initial.png
-./scripts/e2e-db-cli.sh screenshot $RUN_ID 1 'タスク追加後の一覧' actual tests/e2e/screenshots/{slug}/01-add-task-after.png
+```json
+// tests/Browser/screenshots/{slug}/manifest.json
+{
+  "slug": "todo-index",
+  "spec_id": 5,
+  "tested_at": "2026-02-05T12:00:00Z",
+  "result": "passed",
+  "screenshots": [
+    { "file": "00-page-load-initial.png", "description": "ページロード直後" },
+    { "file": "01-add-task-after.png", "description": "タスク追加後の一覧" }
+  ]
+}
 ```
 
 ---

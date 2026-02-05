@@ -29,26 +29,28 @@ if [[ ! -d "$STACK_DIR" ]]; then
     exit 1
 fi
 
-# Update .claude symlink
-echo "Updating .claude symlink..."
+# Update .claude directory (real dir + internal symlinks)
+echo "Updating .claude directory..."
+RELATIVE_BPF=".blueprint-flow"
 if [[ -L "$TARGET_DIR/.claude" ]]; then
     rm "$TARGET_DIR/.claude"
+    mkdir -p "$TARGET_DIR/.claude"
 fi
-ln -sf ".blueprint-flow/.claude.$STACK" "$TARGET_DIR/.claude"
+ln -sf "../$RELATIVE_BPF/.claude.$STACK/skills" "$TARGET_DIR/.claude/skills"
+ln -sf "../$RELATIVE_BPF/.claude.$STACK/agents" "$TARGET_DIR/.claude/agents"
+ln -sf "../$RELATIVE_BPF/.claude.$STACK/hooks" "$TARGET_DIR/.claude/hooks"
+ln -sf "../$RELATIVE_BPF/.claude.$STACK/CLAUDE.md" "$TARGET_DIR/.claude/CLAUDE.md"
+ln -sf "../$RELATIVE_BPF/.claude.$STACK/settings.json" "$TARGET_DIR/.claude/settings.json"
 
 # Update CLI scripts
 echo "Updating CLI scripts..."
 cp "$BLUEPRINT_FLOW_DIR/scripts/blueprint-db-cli.sh" "$TARGET_DIR/scripts/"
-cp "$BLUEPRINT_FLOW_DIR/scripts/e2e-db-cli.sh" "$TARGET_DIR/scripts/"
 chmod +x "$TARGET_DIR/scripts/blueprint-db-cli.sh"
-chmod +x "$TARGET_DIR/scripts/e2e-db-cli.sh"
 
 # Update schema files (preserving databases)
 echo "Updating schema files..."
 cp "$BLUEPRINT_FLOW_DIR/blueprint/schema.sql" "$TARGET_DIR/blueprint/"
 cp "$BLUEPRINT_FLOW_DIR/blueprint/schema.dbml" "$TARGET_DIR/blueprint/"
-cp "$BLUEPRINT_FLOW_DIR/tests/e2e/schema.sql" "$TARGET_DIR/tests/e2e/"
-cp "$BLUEPRINT_FLOW_DIR/tests/e2e/schema.dbml" "$TARGET_DIR/tests/e2e/"
 
 # Update version
 NEW_VERSION=$(git -C "$BLUEPRINT_FLOW_DIR" rev-parse HEAD 2>/dev/null || echo "dev")
@@ -60,5 +62,5 @@ echo ""
 echo "Old version: $OLD_VERSION"
 echo "New version: $(echo $NEW_VERSION | head -c 7)"
 echo ""
-echo "Note: Databases (blueprint.db, e2e.db) were preserved."
+echo "Note: Database (blueprint.db) was preserved."
 echo "      If schema changed, you may need to run migrations."

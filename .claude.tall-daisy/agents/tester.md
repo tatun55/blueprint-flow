@@ -87,10 +87,8 @@ APP_URL=$(grep APP_URL .env | cut -d '=' -f2)
   </step>
 
   <step name="3-prepare">
-    <action>スクリーンショット保存先を作成し、E2E DB のテストランを開始</action>
-    <command>mkdir -p tests/e2e/screenshots/{slug}</command>
-    <command>./scripts/e2e-db-cli.sh run {slug}</command>
-    <extract>run_id を取得（後続のスクショ登録で使用）</extract>
+    <action>スクリーンショット保存先を作成</action>
+    <command>mkdir -p tests/Browser/screenshots/{slug}</command>
   </step>
 
   <step name="4-reset-data">
@@ -101,15 +99,15 @@ APP_URL=$(grep APP_URL .env | cut -d '=' -f2)
 
   <step name="5-execute-scenarios">
     <action>各 scenario を playwright-mcp で実行し、状態ごとにスクショ+説明を保存</action>
-    <note>step_order は 0 始まりの連番。description は「何の状態か」を簡潔に記述。</note>
+    <note>screenshots 配列を構築し、最後に manifest.json として書き出す。</note>
     <for-each scenario="scenarios">
       <sub-step>navigate: APP_URL + target.url にアクセス</sub-step>
-      <sub-step>screenshot-before: 操作前スクショ → e2e-db-cli.sh で登録
-        例: ./scripts/e2e-db-cli.sh screenshot {run_id} 0 'ページロード直後' actual tests/e2e/screenshots/{slug}/00-initial.png
+      <sub-step>screenshot: 操作前スクショを撮影 → screenshots 配列に追加
+        { "file": "00-{scenario}-initial.png", "description": "ページロード直後" }
       </sub-step>
       <sub-step>execute: scenario.steps を実行</sub-step>
-      <sub-step>screenshot-after: 操作後スクショ → e2e-db-cli.sh で登録
-        例: ./scripts/e2e-db-cli.sh screenshot {run_id} 1 'タスク追加後の一覧' actual tests/e2e/screenshots/{slug}/01-add-task-after.png
+      <sub-step>screenshot: 操作後スクショを撮影 → screenshots 配列に追加
+        { "file": "01-{scenario}-after.png", "description": "タスク追加後の一覧" }
       </sub-step>
       <sub-step>verify: scenario.assertions を確認</sub-step>
     </for-each>
@@ -120,9 +118,21 @@ APP_URL=$(grep APP_URL .env | cut -d '=' -f2)
     <command>mcp__playwright-mcp__playwright_close</command>
   </step>
 
-  <step name="7-record-result">
-    <action>テスト結果を e2e.db に記録</action>
-    <command>./scripts/e2e-db-cli.sh result {run_id} passed|failed [notes]</command>
+  <step name="7-save-manifest">
+    <action>manifest.json を書き出し</action>
+    <note>Write tool で tests/Browser/screenshots/{slug}/manifest.json を作成</note>
+    <format>
+    {
+      "slug": "{slug}",
+      "spec_id": {spec_id},
+      "tested_at": "ISO8601",
+      "result": "passed|failed",
+      "screenshots": [
+        { "file": "00-initial.png", "description": "ページロード直後" },
+        { "file": "01-add-task-after.png", "description": "タスク追加後の一覧" }
+      ]
+    }
+    </format>
   </step>
 
   <step name="8-report">
@@ -130,7 +140,6 @@ APP_URL=$(grep APP_URL .env | cut -d '=' -f2)
     <content>
       - シナリオ件数、成功/失敗、失敗詳細
       - スクリーンショット一覧（description 付き、後で人がチェック可能）
-      - run_id（レビュー用）
     </content>
     <note>status 更新は /bpf が行う。agent は結果を報告するのみ。</note>
   </step>
@@ -140,29 +149,38 @@ APP_URL=$(grep APP_URL .env | cut -d '=' -f2)
 
 ## スクリーンショット管理
 
-### 命名規則
+### 保存先
 
-保存先: `tests/e2e/screenshots/{slug}/`
+`tests/Browser/screenshots/{slug}/`
+
+各 slug ディレクトリに:
+- `{NN}-{scenario}-{state}.png` — スクショ画像
+- `manifest.json` — スクショ一覧と description
+
+### 命名規則
 
 | Timing | Filename Pattern | Example |
 |--------|------------------|---------|
-| 初期状態 | `00-initial.png` | ページロード直後 |
-| 操作前 | `{NN}-{scenario}-before.png` | `01-add-task-before.png` |
-| 操作後 | `{NN}-{scenario}-after.png` | `02-add-task-after.png` |
-| エラー時 | `{NN}-{scenario}-error.png` | `03-toggle-error.png` |
+| 初期状態 | `00-{scenario}-initial.png` | `00-page-load-initial.png` |
+| 操作後 | `{NN}-{scenario}-after.png` | `01-add-task-after.png` |
+| エラー時 | `{NN}-{scenario}-error.png` | `02-toggle-error.png` |
 
-### DB 登録（CRITICAL: スクショ撮影ごとに必ず実行）
+### manifest.json（CRITICAL: テスト完了時に必ず作成）
 
-各スクショを撮影したら、e2e-db-cli.sh で description とセットで登録する。
-
-```bash
-# 書式: screenshot <run_id> <step_order> <description> <type> <path>
-./scripts/e2e-db-cli.sh screenshot $RUN_ID 0 'ページロード直後' actual tests/e2e/screenshots/{slug}/00-initial.png
-./scripts/e2e-db-cli.sh screenshot $RUN_ID 1 'タスク入力前' actual tests/e2e/screenshots/{slug}/01-add-task-before.png
-./scripts/e2e-db-cli.sh screenshot $RUN_ID 2 'タスク追加後の一覧' actual tests/e2e/screenshots/{slug}/02-add-task-after.png
+```json
+{
+  "slug": "todo-index",
+  "spec_id": 5,
+  "tested_at": "2026-02-05T12:00:00Z",
+  "result": "passed",
+  "screenshots": [
+    { "file": "00-page-load-initial.png", "description": "ページロード直後" },
+    { "file": "01-add-task-after.png", "description": "タスク追加後の一覧" }
+  ]
+}
 ```
 
-**必ず状態ごとにスクショを撮影し、description で何の状態かを記録する。**
+**必ず状態ごとにスクショを撮影し、manifest.json に description を記録する。**
 
 ---
 
@@ -194,31 +212,27 @@ mcp__playwright-mcp__playwright_get_visible_text()
 # 結果に期待するテキストが含まれるか確認
 ```
 
-### スクリーンショット（状態ごとに撮影 + DB登録）
+### スクリーンショット（状態ごとに撮影、最後に manifest.json）
 
 ```
-# 1. スクショ撮影
+# 初期状態のスクショ
 mcp__playwright-mcp__playwright_screenshot({
-  name: "00-initial",
+  name: "00-page-load-initial",
   savePng: true,
-  downloadsDir: "tests/e2e/screenshots/{slug}"
+  downloadsDir: "tests/Browser/screenshots/{slug}"
 })
-
-# 2. DB に description とセットで登録
-./scripts/e2e-db-cli.sh screenshot $RUN_ID 0 'ページロード直後' actual tests/e2e/screenshots/{slug}/00-initial.png
 
 # 操作実行...
 
-# 3. 操作後のスクショ撮影 + DB登録
+# 操作後のスクショ
 mcp__playwright-mcp__playwright_screenshot({
   name: "01-add-task-after",
   savePng: true,
-  downloadsDir: "tests/e2e/screenshots/{slug}"
+  downloadsDir: "tests/Browser/screenshots/{slug}"
 })
-./scripts/e2e-db-cli.sh screenshot $RUN_ID 1 'タスク追加後の一覧' actual tests/e2e/screenshots/{slug}/01-add-task-after.png
 ```
 
-**重要**: 撮影と DB 登録は必ずセットで行う。description が状態を説明する唯一の記録。
+テスト完了後、Write tool で `tests/Browser/screenshots/{slug}/manifest.json` を作成。
 
 ### Livewire 更新待機
 
