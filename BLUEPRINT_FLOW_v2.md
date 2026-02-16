@@ -380,16 +380,42 @@ todo → doing → review → done
 - **1タスク = 1ファイル**: 全情報が1つのドキュメントに集約
 - **重複は許容**: core/blueprint の情報を意図的にコピー・埋め込み
 
+### 知識セット（CRITICAL: Hub が act 生成時に必ず参照）
+
+blueprint の type に応じて、act に埋め込むルールが決まる。
+Hub は下表に基づいて DB から該当ルールを取得し、指示書エージェントに渡す。
+
+| type | 知識セット (rules-*) |
+|------|---------------------|
+| `page` | stack, architecture, ui, data, auth, style |
+| `partial` | stack, architecture, ui, data, style |
+| `action` | stack, data, auth, style |
+| `table` | stack, db, data, style |
+| `layout` | stack, architecture, ui, style |
+| `test` | stack, testing, style |
+
+- 全タイプに `stack` と `style` を含む
+- `flow` は Hub 専用（act には含めない）
+- 指示書エージェントは上記 + 対象 blueprint + 依存先 blueprint の content を act に埋め込む
+- 不足より過多が望ましい。迷ったら含める
+
+```bash
+# Hub が知識セットを取得するクエリ例（page の場合）
+sqlite3 -json $DB "SELECT slug, content FROM cores WHERE slug IN (
+    'rules-stack','rules-architecture','rules-ui','rules-data','rules-auth','rules-style'
+)"
+```
+
 ### 生成フロー
 
 ```
 Hub が blueprint の step を進める
   ↓
-Hub が「指示書エージェント」を起動
+Hub が知識セット表に基づき、該当ルールを DB から取得
   ↓
-指示書エージェントが core + blueprint + 依存先 blueprint を読み込み
+Hub が「指示書エージェント」を起動（ルール + blueprint + 依存情報を渡す）
   ↓
-act (完全自己完結ドキュメント) を生成して DB に保存
+指示書エージェントが act (完全自己完結ドキュメント) を生成して DB に保存
   ↓
 Hub が「作業エージェント」を act で起動
 ```
