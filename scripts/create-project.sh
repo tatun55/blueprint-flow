@@ -1,6 +1,6 @@
 #!/bin/bash
-# Blueprint Flow - Project Creator
-# Creates a new Laravel project with full setup including blueprint-flow
+# Blueprint Flow v2 - Project Creator
+# Creates a new Laravel project with full setup including blueprint-flow v2
 #
 # Usage: ./.blueprint-flow/scripts/create-project.sh <project-name> [stack]
 #    OR: Run from anywhere: /path/to/create-project.sh <project-name> [stack]
@@ -210,7 +210,7 @@ log_success "blueprint-flow initialized with $STACK stack"
 
 # Commit blueprint-flow setup
 git add -A
-git commit -m "Add blueprint-flow with $STACK stack" --quiet
+git commit -m "Add blueprint-flow v2 with $STACK stack" --quiet
 git push --quiet 2>/dev/null || true
 log_success "Blueprint setup committed"
 

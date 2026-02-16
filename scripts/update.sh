@@ -1,5 +1,5 @@
 #!/bin/bash
-# Update blueprint-flow in a project
+# Blueprint-Flow v2 - Update in a project
 # Usage: ./scripts/update.sh [target_dir]
 
 set -e
@@ -18,7 +18,7 @@ fi
 STACK=$(cat "$TARGET_DIR/.blueprint-flow-stack")
 OLD_VERSION=$(cat "$TARGET_DIR/.blueprint-flow-version" 2>/dev/null || echo "unknown")
 
-echo "Updating blueprint-flow..."
+echo "Updating blueprint-flow v2..."
 echo "Stack: $STACK"
 echo "Current version: $OLD_VERSION"
 
@@ -47,20 +47,19 @@ echo "Updating CLI scripts..."
 cp "$BLUEPRINT_FLOW_DIR/scripts/blueprint-db-cli.sh" "$TARGET_DIR/scripts/"
 chmod +x "$TARGET_DIR/scripts/blueprint-db-cli.sh"
 
-# Update schema files (preserving databases)
-echo "Updating schema files..."
+# Update schema file (preserving database)
+echo "Updating schema..."
 cp "$BLUEPRINT_FLOW_DIR/blueprint/schema.sql" "$TARGET_DIR/blueprint/"
-cp "$BLUEPRINT_FLOW_DIR/blueprint/schema.dbml" "$TARGET_DIR/blueprint/"
 
 # Update version
 NEW_VERSION=$(git -C "$BLUEPRINT_FLOW_DIR" rev-parse HEAD 2>/dev/null || echo "dev")
 echo "$NEW_VERSION" > "$TARGET_DIR/.blueprint-flow-version"
 
 echo ""
-echo "Blueprint-flow updated successfully!"
+echo "Blueprint-flow v2 updated successfully!"
 echo ""
 echo "Old version: $OLD_VERSION"
 echo "New version: $(echo $NEW_VERSION | head -c 7)"
 echo ""
 echo "Note: Database (blueprint.db) was preserved."
-echo "      If schema changed, you may need to run migrations."
+echo "      If schema changed, you may need to reset: ./scripts/blueprint-db-cli.sh reset"

@@ -1,202 +1,212 @@
--- Generated from schema.dbml
--- Blueprint Schema - Spec Management with Review Workflow
+-- Blueprint-Flow v2 Schema
+-- 3-layer document-driven development framework
 
 PRAGMA foreign_keys = ON;
 
-CREATE TABLE IF NOT EXISTS specs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    category TEXT NOT NULL,
-    type TEXT NOT NULL,
-    slug TEXT NOT NULL,
-    name TEXT NOT NULL,
-    description TEXT,
-
-    -- Status workflow (added: blocked)
-    status TEXT DEFAULT 'draft' CHECK(status IN ('draft', 'pending_review', 'approved', 'in_progress', 'impl_review', 'testing', 'done', 'needs_revision', 'blocked')),
-
-    -- Work assignment
-    working_by TEXT,
-
-    -- Git worktree tracking
-    branch TEXT,
-
-    -- Review tracking (4-stage: none → spec_reviewed → impl_reviewed → test_reviewed)
-    human_reviewed TEXT DEFAULT 'none' CHECK(human_reviewed IN ('none', 'spec_reviewed', 'impl_reviewed', 'test_reviewed')),
-    revision_count INTEGER DEFAULT 0,
-    revision_reason TEXT,
-
-    -- E2E testing
-    e2e_status TEXT DEFAULT NULL CHECK(e2e_status IS NULL OR e2e_status IN ('pending', 'passed', 'failed')),
-    e2e_level INTEGER DEFAULT 1 CHECK(e2e_level BETWEEN 1 AND 3),
-
-    -- Ordering (legacy, use spec_dependencies instead)
-    wave INTEGER DEFAULT 1,
-
-    -- Spec data
-    data JSON NOT NULL,
-
-    -- Timestamps
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-
-    UNIQUE(category, type, slug)
+-- =========================================
+-- core 層: プロジェクト基盤
+-- =========================================
+-- overview: アプリ概要・機能一覧
+-- config:   ビジネスルール・定数・業務知識
+-- tech:     技術スタック・コーディングルール・フロー定義
+CREATE TABLE IF NOT EXISTS cores (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    type       TEXT NOT NULL,          -- overview / config / tech
+    slug       TEXT NOT NULL UNIQUE,
+    name       TEXT NOT NULL,
+    summary    TEXT NOT NULL,           -- 20-40字の要約（Hub の全体把握用）
+    content    TEXT NOT NULL,           -- Markdown
+    reviewed   BOOLEAN DEFAULT 0,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- Dependency management (replaces wave for fine-grained control)
-CREATE TABLE IF NOT EXISTS spec_dependencies (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    spec_id INTEGER NOT NULL,
-    blocked_by_spec_id INTEGER NOT NULL,
-    FOREIGN KEY (spec_id) REFERENCES specs(id) ON DELETE CASCADE,
-    FOREIGN KEY (blocked_by_spec_id) REFERENCES specs(id) ON DELETE CASCADE,
-    UNIQUE(spec_id, blocked_by_spec_id)
+-- =========================================
+-- blueprint 層: 機能定義
+-- =========================================
+-- page:    ページ定義
+-- partial: 部品定義
+-- action:  バックエンド処理定義
+-- table:   テーブル定義
+-- layout:  レイアウト定義
+-- test:    テスト定義 (parent_id で対象 blueprint に紐づけ)
+CREATE TABLE IF NOT EXISTS blueprints (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    type        TEXT NOT NULL,          -- page / partial / action / table / layout / test
+    slug        TEXT NOT NULL,
+    name        TEXT NOT NULL,
+    summary     TEXT NOT NULL,           -- 20-40字の機能要約（Hub の全体把握用）
+    content     TEXT NOT NULL,           -- Markdown（具体シナリオまで含む）
+
+    -- パイプライン（step の有効値は core tech のフロー定義に準拠）
+    step        TEXT NOT NULL DEFAULT 'define',
+    step_status TEXT NOT NULL DEFAULT 'todo'
+                CHECK(step_status IN ('todo', 'doing', 'review', 'done')),
+    locked_by   TEXT,                   -- 作業中のエージェント名
+
+    -- 無効化（上流変更時にマーク）
+    dirty        BOOLEAN DEFAULT 0,
+    dirty_reason TEXT,
+
+    -- テスト用（type = 'test' の場合のみ使用）
+    parent_id   INTEGER REFERENCES blueprints(id),
+    test_level  INTEGER,                -- 1 / 2 / 3
+
+    updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(type, slug)
 );
 
--- Tasks table for storing agent instructions
-CREATE TABLE IF NOT EXISTS tasks (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    spec_id INTEGER NOT NULL REFERENCES specs(id) ON DELETE CASCADE,
-    agent_type TEXT NOT NULL CHECK(agent_type IN ('db-architect', 'livewire', 'artisan', 'tester')),
-    content TEXT NOT NULL,
-    status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'completed', 'failed')),
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+-- =========================================
+-- act 層: 指示書（完全自己完結）
+-- =========================================
+CREATE TABLE IF NOT EXISTS acts (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    blueprint_id INTEGER NOT NULL REFERENCES blueprints(id),
+    title        TEXT NOT NULL,
+    content      TEXT NOT NULL,          -- 全情報を内包した完結ドキュメント
+
+    status       TEXT NOT NULL DEFAULT 'todo'
+                 CHECK(status IN ('todo', 'doing', 'done', 'failed')),
+    locked_by    TEXT,                   -- 作業中のエージェント名
+    result       TEXT,                   -- エージェントの作業報告
+
+    created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+    completed_at DATETIME
 );
 
--- Indexes for specs
-CREATE INDEX IF NOT EXISTS idx_specs_category_type ON specs(category, type);
-CREATE INDEX IF NOT EXISTS idx_specs_status ON specs(status);
-CREATE INDEX IF NOT EXISTS idx_specs_wave ON specs(wave);
-CREATE INDEX IF NOT EXISTS idx_specs_working_by ON specs(working_by);
-CREATE INDEX IF NOT EXISTS idx_specs_e2e_status ON specs(e2e_status);
-CREATE INDEX IF NOT EXISTS idx_specs_branch ON specs(branch);
+-- =========================================
+-- 依存関係（blueprint 間）
+-- =========================================
+CREATE TABLE IF NOT EXISTS dependencies (
+    source_id INTEGER NOT NULL REFERENCES blueprints(id),
+    target_id INTEGER NOT NULL REFERENCES blueprints(id),
+    detail    TEXT,                      -- 例: "users.id, users.role"
+    UNIQUE(source_id, target_id)
+);
 
--- Indexes for tasks
-CREATE INDEX IF NOT EXISTS idx_tasks_spec_id ON tasks(spec_id);
-CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+-- =========================================
+-- Indexes
+-- =========================================
+CREATE INDEX IF NOT EXISTS idx_cores_type ON cores(type);
+CREATE INDEX IF NOT EXISTS idx_blueprints_type ON blueprints(type);
+CREATE INDEX IF NOT EXISTS idx_blueprints_step ON blueprints(step);
+CREATE INDEX IF NOT EXISTS idx_blueprints_step_status ON blueprints(step_status);
+CREATE INDEX IF NOT EXISTS idx_blueprints_parent_id ON blueprints(parent_id);
+CREATE INDEX IF NOT EXISTS idx_acts_blueprint_id ON acts(blueprint_id);
+CREATE INDEX IF NOT EXISTS idx_acts_status ON acts(status);
+CREATE INDEX IF NOT EXISTS idx_deps_source ON dependencies(source_id);
+CREATE INDEX IF NOT EXISTS idx_deps_target ON dependencies(target_id);
 
--- Indexes for dependencies
-CREATE INDEX IF NOT EXISTS idx_deps_spec_id ON spec_dependencies(spec_id);
-CREATE INDEX IF NOT EXISTS idx_deps_blocked_by ON spec_dependencies(blocked_by_spec_id);
-
--- Trigger: update updated_at
-CREATE TRIGGER IF NOT EXISTS specs_updated_at
-AFTER UPDATE ON specs
+-- =========================================
+-- Triggers
+-- =========================================
+CREATE TRIGGER IF NOT EXISTS cores_updated_at
+AFTER UPDATE ON cores
 BEGIN
-    UPDATE specs SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+    UPDATE cores SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
 END;
 
--- View: Available for implementation (approved, not locked, legacy wave-based)
-CREATE VIEW IF NOT EXISTS available_specs AS
-SELECT * FROM specs
-WHERE status = 'approved' AND working_by IS NULL
-ORDER BY wave, category, type;
+CREATE TRIGGER IF NOT EXISTS blueprints_updated_at
+AFTER UPDATE ON blueprints
+BEGIN
+    UPDATE blueprints SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
 
--- View: Available with dependencies resolved
--- Returns specs that are approved, unlocked, and all dependencies are done
-CREATE VIEW IF NOT EXISTS available_with_deps AS
-SELECT s.* FROM specs s
-WHERE s.status = 'approved'
-  AND s.working_by IS NULL
+-- =========================================
+-- VIEWs
+-- =========================================
+
+-- ★ アプリ全体像（Hub は常にこれを参照してコンテキストを維持する）
+CREATE VIEW IF NOT EXISTS app_snapshot AS
+-- core 層: アプリ概要・ビジネスルール・技術情報
+SELECT 1 as sort, 'core' as layer, type, slug, name, summary
+FROM cores
+UNION ALL
+-- blueprint 層: 機能一覧（テスト除く）
+SELECT 2 as sort, type as layer, type, slug, name, summary
+FROM blueprints WHERE type != 'test'
+UNION ALL
+-- blueprint 層: テスト定義
+SELECT 3 as sort, 'test' as layer, type,
+    slug, name, summary
+FROM blueprints WHERE type = 'test'
+ORDER BY sort, layer, slug;
+
+-- ① プロジェクト全体の進捗（step 別の集計）
+CREATE VIEW IF NOT EXISTS project_progress AS
+SELECT
+    step,
+    COUNT(*) as total,
+    SUM(step_status = 'done') as completed,
+    SUM(step_status = 'doing') as in_progress,
+    SUM(step_status = 'review') as in_review,
+    SUM(dirty = 1) as dirty_count
+FROM blueprints
+WHERE type != 'test'
+GROUP BY step
+ORDER BY MIN(id);
+
+-- ② 全アイテムのステータス一覧
+CREATE VIEW IF NOT EXISTS item_status AS
+SELECT
+    id, type, slug, name,
+    step, step_status, locked_by,
+    dirty, dirty_reason
+FROM blueprints
+ORDER BY type, id;
+
+-- ③ 次にやるべきこと（依存解決済み・完了待ち）
+CREATE VIEW IF NOT EXISTS next_actions AS
+SELECT b.id, b.type, b.slug, b.name, b.step, b.step_status
+FROM blueprints b
+WHERE b.step_status = 'done'
+  AND b.dirty = 0
+  AND b.step != 'done'
   AND NOT EXISTS (
-      SELECT 1 FROM spec_dependencies d
-      JOIN specs blocked ON d.blocked_by_spec_id = blocked.id
-      WHERE d.spec_id = s.id AND blocked.status != 'done'
-  )
-ORDER BY s.id;
+    SELECT 1 FROM dependencies dep
+    JOIN blueprints blocker ON dep.target_id = blocker.id
+    WHERE dep.source_id = b.id
+      AND (blocker.step_status != 'done' OR blocker.dirty = 1)
+  );
 
--- View: Currently in progress
-CREATE VIEW IF NOT EXISTS in_progress_specs AS
-SELECT * FROM specs
-WHERE status = 'in_progress'
-ORDER BY updated_at DESC;
-
--- View: Awaiting human review
-CREATE VIEW IF NOT EXISTS pending_review_specs AS
-SELECT * FROM specs
-WHERE status IN ('pending_review', 'impl_review')
-ORDER BY updated_at ASC;
-
--- View: Needs attention (revision required or blocked)
-CREATE VIEW IF NOT EXISTS needs_attention_specs AS
-SELECT * FROM specs
-WHERE status IN ('needs_revision', 'blocked')
-ORDER BY updated_at DESC;
-
--- View: Specs with their blocking dependencies
-CREATE VIEW IF NOT EXISTS spec_blockers AS
+-- ④ 要注意アイテム（dirty または作業中）
+CREATE VIEW IF NOT EXISTS attention_needed AS
 SELECT
-    s.id,
-    s.slug,
-    s.status,
-    GROUP_CONCAT(blocked.slug) as blocked_by_slugs,
-    GROUP_CONCAT(blocked.id) as blocked_by_ids,
-    COUNT(CASE WHEN blocked.status != 'done' THEN 1 END) as pending_blockers
-FROM specs s
-LEFT JOIN spec_dependencies d ON s.id = d.spec_id
-LEFT JOIN specs blocked ON d.blocked_by_spec_id = blocked.id
-GROUP BY s.id;
+    id, type, slug, name,
+    step, step_status,
+    dirty_reason, locked_by
+FROM blueprints
+WHERE dirty = 1 OR locked_by IS NOT NULL;
 
--- View: E2E testing pending
-CREATE VIEW IF NOT EXISTS e2e_pending_specs AS
-SELECT * FROM specs
-WHERE e2e_status = 'pending'
-ORDER BY wave, category, type;
-
--- View: Progress summary
-CREATE VIEW IF NOT EXISTS progress_summary AS
+-- ⑤ テストカバレッジ
+CREATE VIEW IF NOT EXISTS test_coverage AS
 SELECT
-    status,
-    COUNT(*) as count,
-    GROUP_CONCAT(slug) as specs
-FROM specs
-GROUP BY status
-ORDER BY
-    CASE status
-        WHEN 'draft' THEN 1
-        WHEN 'pending_review' THEN 2
-        WHEN 'approved' THEN 3
-        WHEN 'in_progress' THEN 4
-        WHEN 'impl_review' THEN 5
-        WHEN 'testing' THEN 6
-        WHEN 'done' THEN 7
-        WHEN 'needs_revision' THEN 8
-    END;
+    b.id, b.type, b.slug, b.name,
+    MAX(CASE WHEN t.test_level = 1 THEN t.step_status END) as l1,
+    MAX(CASE WHEN t.test_level = 2 THEN t.step_status END) as l2,
+    MAX(CASE WHEN t.test_level = 3 THEN t.step_status END) as l3
+FROM blueprints b
+LEFT JOIN blueprints t ON t.parent_id = b.id AND t.type = 'test'
+WHERE b.type != 'test'
+GROUP BY b.id;
 
--- View: E2E level progress
-CREATE VIEW IF NOT EXISTS e2e_level_summary AS
+-- ⑥ 依存関係マップ（可読表示）
+CREATE VIEW IF NOT EXISTS dependency_map AS
 SELECT
-    e2e_level as level,
-    e2e_status as status,
-    COUNT(*) as count
-FROM specs
-WHERE e2e_status IS NOT NULL
-GROUP BY e2e_level, e2e_status
-ORDER BY e2e_level, e2e_status;
+    s.type || '/' || s.slug as item,
+    t.type || '/' || t.slug as depends_on,
+    t.step as dep_step,
+    t.step_status as dep_status,
+    dep.detail
+FROM dependencies dep
+JOIN blueprints s ON dep.source_id = s.id
+JOIN blueprints t ON dep.target_id = t.id;
 
--- View: Human review status summary
-CREATE VIEW IF NOT EXISTS review_summary AS
+-- ⑦ act タスクボード（未完了タスク）
+CREATE VIEW IF NOT EXISTS task_board AS
 SELECT
-    human_reviewed as stage,
-    COUNT(*) as count,
-    GROUP_CONCAT(slug) as specs
-FROM specs
-GROUP BY human_reviewed
-ORDER BY
-    CASE human_reviewed
-        WHEN 'none' THEN 1
-        WHEN 'spec_reviewed' THEN 2
-        WHEN 'impl_reviewed' THEN 3
-        WHEN 'test_reviewed' THEN 4
-    END;
-
--- View: Specs needing review (not fully reviewed)
-CREATE VIEW IF NOT EXISTS needs_review_specs AS
-SELECT * FROM specs
-WHERE human_reviewed != 'test_reviewed'
-ORDER BY
-    CASE human_reviewed
-        WHEN 'none' THEN 1
-        WHEN 'spec_reviewed' THEN 2
-        WHEN 'impl_reviewed' THEN 3
-    END,
-    category, type;
+    a.id, a.title, a.status, a.locked_by,
+    b.type as bp_type, b.slug as bp_slug
+FROM acts a
+JOIN blueprints b ON a.blueprint_id = b.id
+WHERE a.status != 'done'
+ORDER BY a.created_at;

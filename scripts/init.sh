@@ -1,11 +1,9 @@
 #!/bin/bash
-# Initialize blueprint-flow in a project
+# Blueprint-Flow v2 - Project Initializer
 # Usage: ./scripts/init.sh [stack] [target_dir]
 #
 # Stack defaults to "tall-daisy"
-# Can be called from either:
-#   - $BPF_HOME/scripts/init.sh (symlink mode)
-#   - .blueprint-flow/scripts/init.sh (submodule mode)
+# Initializes .claude symlinks, blueprint DB, and seed data
 
 set -e
 
@@ -15,7 +13,7 @@ BLUEPRINT_FLOW_DIR="$(cd "$(dirname "$SCRIPT_DIR")" && pwd -P)"
 STACK="${1:-tall-daisy}"
 TARGET_DIR="${2:-.}"
 
-echo "Initializing blueprint-flow with stack: $STACK"
+echo "Initializing blueprint-flow v2 with stack: $STACK"
 echo "Blueprint-flow location: $BLUEPRINT_FLOW_DIR"
 
 # Validate stack exists
@@ -27,15 +25,11 @@ if [[ ! -d "$STACK_DIR" ]]; then
     exit 1
 fi
 
-# Get relative path
-if [[ "$TARGET_DIR" == "." ]]; then
-    RELATIVE_BPF=".blueprint-flow"
-else
-    RELATIVE_BPF=".blueprint-flow"
-fi
+RELATIVE_BPF=".blueprint-flow"
 
-# Create .claude directory with internal symlinks
-# (real directory required for Claude Code to read settings.json/hooks)
+# ============================================
+# Step 1: Create .claude directory with symlinks
+# ============================================
 echo "Creating .claude directory..."
 if [[ -L "$TARGET_DIR/.claude" ]]; then
     rm "$TARGET_DIR/.claude"
@@ -50,26 +44,30 @@ ln -sf "../$RELATIVE_BPF/.claude.$STACK/hooks" "$TARGET_DIR/.claude/hooks"
 ln -sf "../$RELATIVE_BPF/.claude.$STACK/CLAUDE.md" "$TARGET_DIR/.claude/CLAUDE.md"
 ln -sf "../$RELATIVE_BPF/.claude.$STACK/settings.json" "$TARGET_DIR/.claude/settings.json"
 
-# Create project directories
+# ============================================
+# Step 2: Create project directories and copy schema
+# ============================================
 echo "Creating project directories..."
 mkdir -p "$TARGET_DIR/blueprint"
-mkdir -p "$TARGET_DIR/scripts"
 
-# Copy CLI scripts
-echo "Copying CLI scripts..."
-cp "$BLUEPRINT_FLOW_DIR/scripts/blueprint-db-cli.sh" "$TARGET_DIR/scripts/"
-chmod +x "$TARGET_DIR/scripts/blueprint-db-cli.sh"
-
-# Copy schema files
-echo "Copying schema files..."
+echo "Copying schema..."
 cp "$BLUEPRINT_FLOW_DIR/blueprint/schema.sql" "$TARGET_DIR/blueprint/"
-cp "$BLUEPRINT_FLOW_DIR/blueprint/schema.dbml" "$TARGET_DIR/blueprint/"
 
-# Initialize databases
-echo "Initializing databases..."
-"$TARGET_DIR/scripts/blueprint-db-cli.sh" init
+# ============================================
+# Step 3: Store stack info (needed before DB init for seed resolution)
+# ============================================
+echo "$STACK" > "$TARGET_DIR/.blueprint-flow-stack"
+git -C "$BLUEPRINT_FLOW_DIR" rev-parse HEAD 2>/dev/null > "$TARGET_DIR/.blueprint-flow-version" || echo "dev" > "$TARGET_DIR/.blueprint-flow-version"
 
-# Create minimal CLAUDE.md if not exists
+# ============================================
+# Step 4: Initialize database + seed rules
+# ============================================
+echo "Initializing database..."
+(cd "$TARGET_DIR" && bpf db init)
+
+# ============================================
+# Step 6: Create minimal CLAUDE.md if not exists
+# ============================================
 if [[ ! -f "$TARGET_DIR/CLAUDE.md" ]]; then
     echo "Creating CLAUDE.md..."
     cat > "$TARGET_DIR/CLAUDE.md" << 'CLAUDE_EOF'
@@ -77,7 +75,7 @@ if [[ ! -f "$TARGET_DIR/CLAUDE.md" ]]; then
 
 ## Blueprint Flow
 
-このプロジェクトは blueprint-flow を使用。
+このプロジェクトは blueprint-flow v2 を使用。
 核心ルールは `.claude/CLAUDE.md` に定義済み（常時適用）。
 
 /bpf でオーケストレーションを実行可能。
@@ -88,15 +86,15 @@ if [[ ! -f "$TARGET_DIR/CLAUDE.md" ]]; then
 CLAUDE_EOF
 fi
 
-# Store stack and version info
-echo "$STACK" > "$TARGET_DIR/.blueprint-flow-stack"
-git -C "$BLUEPRINT_FLOW_DIR" rev-parse HEAD 2>/dev/null > "$TARGET_DIR/.blueprint-flow-version" || echo "dev" > "$TARGET_DIR/.blueprint-flow-version"
-
+# ============================================
+# Complete
+# ============================================
 echo ""
-echo "Blueprint-flow initialized successfully!"
+echo "Blueprint-flow v2 initialized successfully!"
 echo ""
 echo "Stack: $STACK"
 echo "Version: $(cat "$TARGET_DIR/.blueprint-flow-version" | head -c 7)"
+echo "Database: blueprint/blueprint.db"
 echo ""
 echo ".claude/ -> .blueprint-flow/.claude.$STACK/* (internal symlinks)"
 echo ""
