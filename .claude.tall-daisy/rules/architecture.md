@@ -1,39 +1,38 @@
-# アーキテクチャ
-> Livewire構成・ルーティング・ディレクトリ・レイアウト
+# Architecture
+> Livewire structure, routing, directories, layouts
 
-## Livewire コンポーネント
+## Livewire Components
 
-- **フルページコンポーネント**として構成（コントローラ不要）
-- **従来型**: Class (`app/Livewire/`) + Blade (`resources/views/livewire/`) 分離
-- ディレクトリ構成は **Laravel デフォルト**に準拠
+- **Full-page components** (no controllers needed)
+- **Traditional separation**: Class (`app/Livewire/`) + Blade (`resources/views/livewire/`)
+- Follow **Laravel default** directory structure
 
-## ルーティング
+## Routing
 
-- `routes/web.php` で明示的に定義
-- Livewire フルページコンポーネントクラスを直接指定
+- Explicit routes in `routes/web.php`
+- Point directly to Livewire full-page component classes
 
 ```php
-// routes/web.php
 Route::get('/tasks', TaskIndex::class)->name('tasks.index');
 Route::get('/tasks/{task}', TaskShow::class)->name('tasks.show');
 ```
 
-## ディレクトリ構成
+## Directory Structure
 
 ```
 app/
-├── Livewire/           # Livewire コンポーネント (フルページ + partials)
-├── Models/             # Eloquent モデル
-└── Actions/            # Action クラス（複雑/再利用ロジック）
+├── Livewire/           # Livewire components (full-page + partials)
+├── Models/             # Eloquent models
+└── Actions/            # Action classes (complex/reusable logic)
 
 resources/views/
-├── livewire/           # Livewire Blade テンプレート
+├── livewire/           # Livewire Blade templates
 └── components/
-    └── layouts/        # レイアウトコンポーネント
+    └── layouts/        # Layout components
 ```
 
-## レイアウト
+## Layouts
 
-- **Livewire レイアウトコンポーネント**で管理
-- `resources/views/components/layouts/` に配置
-- `<x-layouts.app>` で使用
+- Managed via **Livewire layout components**
+- Placed in `resources/views/components/layouts/`
+- Used as `<x-layouts.app>`

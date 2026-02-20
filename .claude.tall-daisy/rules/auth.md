@@ -1,16 +1,16 @@
-# 認証・認可
-> 認証は自作・認可はPolicy+Gate・権限はroleカラム
+# Auth & Authorization
+> Custom auth, Policy + Gate, role column
 
-## 認証
+## Authentication
 
-- **自作実装**（Breeze/Jetstream 不使用）
+- **Custom implementation** (no Breeze/Jetstream)
 
-## 認可
+## Authorization
 
-- **Policy** (モデル紐づき) + **Gate** (グローバル権限) 併用
-- `$this->authorize()` / `Gate::allows()` でチェック
+- **Policy** (model-bound) + **Gate** (global permissions) combined
+- Check via `$this->authorize()` / `Gate::allows()`
 
-## 権限管理
+## Permission Management
 
-- `users` テーブルの `role` カラムで管理
-- ロール値は core config で定義
+- Managed via `role` column on `users` table
+- Role values defined in core config

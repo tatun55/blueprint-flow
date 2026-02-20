@@ -1,22 +1,22 @@
-# TALL-daisy スタック
-> 技術スタック・バージョン定義
+# TALL-daisy Stack
+> Tech stack and version definitions
 
-## 使用技術
+## Technologies
 
-| 技術 | バージョン | 用途 |
-|------|-----------|------|
-| PHP | 8.3+ | サーバーサイド言語 |
-| MySQL | 8.0+ | データベース |
-| Laravel | 12 | PHP フレームワーク |
-| Livewire | 4 | フルページコンポーネント |
-| Tailwind CSS | 4 | ユーティリティファースト CSS |
-| daisyUI | 5 | Tailwind CSS コンポーネントライブラリ |
-| Alpine.js | 3 | 軽量 JS（UI 状態制御のみ） |
-| xylph-ui | - | Alpine.js + daisyUI 製の独自静的 UI コンポーネント集 |
-| Vite | - | ビルドツール |
-| Pest | - | テストフレームワーク |
+| Technology | Version | Purpose |
+|-----------|---------|---------|
+| PHP | 8.3+ | Server-side language |
+| MySQL | 8.0+ | Database |
+| Laravel | 12 | PHP framework |
+| Livewire | 4 | Full-page components |
+| Tailwind CSS | 4 | Utility-first CSS |
+| daisyUI | 5 | Tailwind CSS component library |
+| Alpine.js | 3 | Lightweight JS (UI state only) |
+| xylph-ui | - | Custom static UI components (Alpine.js + daisyUI) |
+| Vite | - | Build tool |
+| Pest | - | Test framework |
 
-## パッケージ管理
+## Package Managers
 
 - PHP: Composer
 - JS: npm

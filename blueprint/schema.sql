@@ -56,22 +56,37 @@ CREATE TABLE IF NOT EXISTS blueprints (
 );
 
 -- =========================================
--- act 層: 指示書（完全自己完結）
+-- act 層: 実装指示 + 作業記録
 -- =========================================
+-- content: 75% detail level (file paths, structure, edge cases, past feedback)
+-- result:  agent report (status, files, summary, screenshots, issues)
 CREATE TABLE IF NOT EXISTS acts (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     blueprint_id INTEGER NOT NULL REFERENCES blueprints(id),
     title        TEXT NOT NULL,
-    content      TEXT NOT NULL,          -- 全情報を内包した完結ドキュメント
+    content      TEXT NOT NULL DEFAULT '',  -- implementation details + Hub notes
 
     status       TEXT NOT NULL DEFAULT 'todo'
                  CHECK(status IN ('todo', 'doing', 'done', 'failed')),
-    locked_by    TEXT,                   -- 作業中のエージェント名
-    result       TEXT,                   -- エージェントの作業報告
+    locked_by    TEXT,                   -- agent name while working
+    result       TEXT,                   -- structured agent report
 
     created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
     completed_at DATETIME
 );
+
+-- =========================================
+-- 知識セット（blueprint type → rule slug マッピング）
+-- =========================================
+-- Coding agent が act の blueprint_id から type を取得し、
+-- このテーブルで必要な rules を自動取得する
+CREATE TABLE IF NOT EXISTS knowledge_sets (
+    blueprint_type TEXT NOT NULL,       -- page / partial / action / table / layout / test
+    rule_slug      TEXT NOT NULL,       -- rules/*.md のファイル名（拡張子なし）
+    UNIQUE(blueprint_type, rule_slug)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ks_type ON knowledge_sets(blueprint_type);
 
 -- =========================================
 -- 依存関係（blueprint 間）
@@ -80,6 +95,7 @@ CREATE TABLE IF NOT EXISTS dependencies (
     source_id INTEGER NOT NULL REFERENCES blueprints(id),
     target_id INTEGER NOT NULL REFERENCES blueprints(id),
     detail    TEXT,                      -- 例: "users.id, users.role"
+    dep_gate  TEXT NOT NULL DEFAULT 'done',  -- 依存解決に必要な target の step ('impl', 'done' 等)
     UNIQUE(source_id, target_id)
 );
 
@@ -117,9 +133,13 @@ END;
 
 -- ★ アプリ全体像（Hub は常にこれを参照してコンテキストを維持する）
 CREATE VIEW IF NOT EXISTS app_snapshot AS
+-- concept: プロジェクトコンセプト（最上位）
+SELECT 0 as sort, 'concept' as layer, type, slug, name, summary
+FROM cores WHERE type = 'concept'
+UNION ALL
 -- core 層: アプリ概要・ビジネスルール・技術情報
 SELECT 1 as sort, 'core' as layer, type, slug, name, summary
-FROM cores
+FROM cores WHERE type != 'concept'
 UNION ALL
 -- blueprint 層: 機能一覧（テスト除く）
 SELECT 2 as sort, type as layer, type, slug, name, summary
@@ -154,6 +174,9 @@ SELECT
 FROM blueprints
 ORDER BY type, id;
 
+-- step ordering helper (used in dep_gate checks)
+-- define=1, seed=2, impl=3, test_l1=4, test_l2=5, test_l3=6, done=7
+
 -- ③ 次にやるべきこと（依存解決済み・完了待ち）
 CREATE VIEW IF NOT EXISTS next_actions AS
 SELECT b.id, b.type, b.slug, b.name, b.step, b.step_status
@@ -165,7 +188,19 @@ WHERE b.step_status = 'done'
     SELECT 1 FROM dependencies dep
     JOIN blueprints blocker ON dep.target_id = blocker.id
     WHERE dep.source_id = b.id
-      AND (blocker.step_status != 'done' OR blocker.dirty = 1)
+      AND (
+        -- dirty blocker always blocks
+        blocker.dirty = 1
+        OR NOT (
+          -- blocker is past the gate step
+          (CASE blocker.step WHEN 'define' THEN 1 WHEN 'seed' THEN 2 WHEN 'impl' THEN 3 WHEN 'test_l1' THEN 4 WHEN 'test_l2' THEN 5 WHEN 'test_l3' THEN 6 WHEN 'done' THEN 7 END)
+          >
+          (CASE dep.dep_gate WHEN 'define' THEN 1 WHEN 'seed' THEN 2 WHEN 'impl' THEN 3 WHEN 'test_l1' THEN 4 WHEN 'test_l2' THEN 5 WHEN 'test_l3' THEN 6 WHEN 'done' THEN 7 END)
+          OR
+          -- blocker is AT the gate step and completed
+          (blocker.step = dep.dep_gate AND blocker.step_status = 'done')
+        )
+      )
   );
 
 -- ④ 要注意アイテム（dirty または作業中）
@@ -194,6 +229,7 @@ CREATE VIEW IF NOT EXISTS dependency_map AS
 SELECT
     s.type || '/' || s.slug as item,
     t.type || '/' || t.slug as depends_on,
+    dep.dep_gate,
     t.step as dep_step,
     t.step_status as dep_status,
     dep.detail

@@ -1,38 +1,38 @@
-# UI ルール
-> daisyUI・Alpine.js・xylph-ui・モーダル・通知・エラー表示
+# UI Rules
+> daisyUI, Alpine.js, xylph-ui, modals, notifications, error display
 
 ## CSS
 
-- **daisyUI コンポーネントクラス優先**
-- 微調整に Tailwind utility を使用
-- カスタム CSS は書かない
+- **daisyUI component classes first**
+- Use Tailwind utilities for fine-tuning only
+- No custom CSS
 
-## コンポーネント
+## Components
 
-| 種類 | 方式 | 例 |
-|------|------|-----|
-| 静的 UI 部品 | xylph-ui コンポーネント | `<x-ui-button>`, `<x-ui-modal>` |
-| 動的部品 (partials) | Livewire コンポーネント | 複雑なページの分割時のみ |
-| モーダル/ドロワー | xylph-ui (Alpine.js 制御) | 確認ダイアログ、CRUD フォーム |
-| 通知 (flash) | xylph-ui notification | 操作成功/失敗のフィードバック |
+| Type | Method | Example |
+|------|--------|---------|
+| Static UI parts | xylph-ui components | `<x-ui-button>`, `<x-ui-modal>` |
+| Dynamic parts (partials) | Livewire components | Only for complex page splits |
+| Modal/Drawer | xylph-ui (Alpine.js controlled) | Confirm dialogs, CRUD forms |
+| Notification (flash) | xylph-ui notification | Success/failure feedback |
 
-## Alpine.js の役割
+## Alpine.js Role
 
-- **UI 状態のみ**: toggle, dropdown, modal の開閉等
-- データ操作・サーバー通信は全て Livewire が担当
-- Livewire との連携は `$wire` 経由
+- **UI state only**: toggle, dropdown, modal open/close
+- All data operations and server communication handled by Livewire
+- Livewire integration via `$wire`
 
-## ページ遷移の最小化
+## Minimize Page Navigation
 
-- **CRUD はモーダルで同一ページ内完結**
-- 一覧ページから離れずに作成・編集・削除を行う
-- ページ遷移は本当に別画面が必要な場合のみ（詳細表示、設定画面等）
+- **CRUD in modals on the same page**
+- Create/edit/delete without leaving the list page
+- Navigate only when a separate screen is truly needed (detail view, settings, etc.)
 
-## エラー表示
+## Error Display
 
-- バリデーションエラーは**フィールド直下**にメッセージ表示
-- `@error` ディレクティブを使用
+- Validation errors shown **below each field**
+- Use `@error` directive
 
-## ページネーション
+## Pagination
 
-- Livewire の `WithPagination` trait で動的ページネーション
+- Livewire `WithPagination` trait for dynamic pagination

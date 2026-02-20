@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blueprint-Flow Dashboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js"></script>
+</head>
+<body class="bg-base-300 min-h-screen">
+  <div x-data="dashboard()" x-init="init()">
+
+    <!-- Header -->
+    <div class="navbar bg-base-100 shadow-lg mb-4">
+      <div class="flex-1">
+        <h1 class="text-2xl font-bold">Blueprint-Flow</h1>
+        <span class="text-xs ml-3 opacity-60" x-text="projectPath"></span>
+      </div>
+      <div class="flex-none gap-2">
+        <label class="label cursor-pointer gap-2">
+          <span class="label-text text-sm">Auto-refresh (5s)</span>
+          <input type="checkbox" class="toggle toggle-sm" x-model="autoRefresh" @change="toggleAutoRefresh()">
+        </label>
+        <button class="btn btn-sm btn-ghost" @click="loadAll()">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="container mx-auto px-4 mb-6">
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="stat bg-base-100 rounded-lg shadow">
+          <div class="stat-title">Total Blueprints</div>
+          <div class="stat-value text-primary" x-text="stats.blueprints?.done + '/' + stats.blueprints?.total"></div>
+          <div class="stat-desc">完了率: <span x-text="completionRate()"></span>%</div>
+        </div>
+        <div class="stat bg-base-100 rounded-lg shadow">
+          <div class="stat-title">Active</div>
+          <div class="stat-value text-warning" x-text="stats.blueprints?.active || 0"></div>
+          <div class="stat-desc">実装中</div>
+        </div>
+        <div class="stat bg-base-100 rounded-lg shadow">
+          <div class="stat-title">Dirty</div>
+          <div class="stat-value text-error" x-text="stats.blueprints?.dirty || 0"></div>
+          <div class="stat-desc">要修正</div>
+        </div>
+        <div class="stat bg-base-100 rounded-lg shadow">
+          <div class="stat-title">Acts</div>
+          <div class="stat-value text-secondary" x-text="stats.acts?.done + '/' + stats.acts?.total"></div>
+          <div class="stat-desc">タスク完了数</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Tabs -->
+    <div class="container mx-auto px-4 pb-8">
+      <div class="bg-base-100 rounded-lg shadow-lg p-4">
+        <div role="tablist" class="tabs tabs-bordered">
+          <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Blueprints" checked />
+          <div role="tabpanel" class="tab-content pt-4">
+            <div class="overflow-x-auto">
+              <table class="table table-sm table-zebra">
+                <thead>
+                  <tr>
+                    <th class="w-12">ID</th>
+                    <th class="w-24">Type</th>
+                    <th>Slug</th>
+                    <th class="w-32">Step</th>
+                    <th class="w-32">Status</th>
+                    <th class="w-20">Dirty</th>
+                    <th class="w-24">Locked</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="bp in status" :key="bp.id">
+                    <tr class="cursor-pointer hover" @click="toggleBlueprintDetail(bp.id)">
+                      <td x-text="bp.id"></td>
+                      <td><span class="badge badge-sm" :class="typeBadgeClass(bp.type)" x-text="bp.type"></span></td>
+                      <td class="font-mono text-xs" x-text="bp.slug"></td>
+                      <td x-text="bp.step"></td>
+                      <td><span class="badge badge-sm" :class="statusBadgeClass(bp.step_status)" x-text="bp.step_status"></span></td>
+                      <td><span x-show="bp.dirty === 1" class="badge badge-error badge-sm">dirty</span></td>
+                      <td class="text-xs opacity-70" x-text="bp.locked_by || '-'"></td>
+                    </tr>
+                    <tr x-show="expandedBp === bp.id">
+                      <td colspan="7" class="bg-base-200">
+                        <div class="p-4" x-show="blueprintDetail">
+                          <div class="mb-2"><strong>Name:</strong> <span x-text="blueprintDetail?.name"></span></div>
+                          <div class="mb-2"><strong>Summary:</strong> <span x-text="blueprintDetail?.summary"></span></div>
+                          <div class="divider">Content</div>
+                          <pre class="text-xs bg-base-300 p-3 rounded overflow-x-auto" x-text="blueprintDetail?.content"></pre>
+                        </div>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Pipeline" />
+          <div role="tabpanel" class="tab-content pt-4">
+            <div class="space-y-3">
+              <template x-for="step in progress" :key="step.step">
+                <div>
+                  <div class="flex justify-between mb-1">
+                    <span class="font-semibold" x-text="step.step"></span>
+                    <span class="text-sm opacity-70">
+                      <span x-text="step.completed"></span>/<span x-text="step.total"></span>
+                      <span x-show="step.in_progress > 0" class="text-warning ml-2">(<span x-text="step.in_progress"></span> doing)</span>
+                      <span x-show="step.dirty_count > 0" class="text-error ml-2">(<span x-text="step.dirty_count"></span> dirty)</span>
+                    </span>
+                  </div>
+                  <progress class="progress progress-success w-full" :value="step.completed" :max="step.total"></progress>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Dependencies" />
+          <div role="tabpanel" class="tab-content pt-4">
+            <div class="overflow-x-auto">
+              <table class="table table-sm table-zebra">
+                <thead>
+                  <tr>
+                    <th>Item</th>
+                    <th>Depends On</th>
+                    <th>Gate</th>
+                    <th>Dep Step</th>
+                    <th>Dep Status</th>
+                    <th>Detail</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="dep in dependencies" :key="dep.item + dep.depends_on">
+                    <tr>
+                      <td class="font-mono text-xs" x-text="dep.item"></td>
+                      <td class="font-mono text-xs" x-text="dep.depends_on"></td>
+                      <td><span class="badge badge-sm" :class="dep.dep_gate === 'impl' ? 'badge-accent' : 'badge-ghost'" x-text="dep.dep_gate"></span></td>
+                      <td x-text="dep.dep_step"></td>
+                      <td><span class="badge badge-sm" :class="statusBadgeClass(dep.dep_status)" x-text="dep.dep_status"></span></td>
+                      <td class="text-xs opacity-70" x-text="dep.detail || '-'"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Cores" />
+          <div role="tabpanel" class="tab-content pt-4">
+            <div class="space-y-2">
+              <template x-for="core in cores" :key="core.id">
+                <div class="collapse collapse-arrow bg-base-200">
+                  <input type="checkbox" @change="loadCoreDetail(core.slug, $event.target.checked)" />
+                  <div class="collapse-title font-medium">
+                    <span class="badge badge-sm mr-2" :class="core.type === 'design' ? 'badge-primary' : 'badge-info'" x-text="core.type"></span>
+                    <span x-text="core.slug"></span>
+                    <span class="ml-3 text-sm opacity-70" x-text="core.name"></span>
+                    <span x-show="core.reviewed === 1" class="badge badge-success badge-sm ml-2">reviewed</span>
+                  </div>
+                  <div class="collapse-content">
+                    <div x-show="coreDetails[core.slug]">
+                      <div class="mb-2"><strong>Summary:</strong> <span x-text="coreDetails[core.slug]?.summary"></span></div>
+                      <div class="divider">Content</div>
+                      <pre class="text-xs bg-base-300 p-3 rounded overflow-x-auto" x-text="coreDetails[core.slug]?.content"></pre>
+                    </div>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Acts" />
+          <div role="tabpanel" class="tab-content pt-4">
+            <div class="overflow-x-auto">
+              <table class="table table-sm table-zebra">
+                <thead>
+                  <tr>
+                    <th class="w-12">ID</th>
+                    <th class="w-32">Blueprint</th>
+                    <th>Title</th>
+                    <th class="w-24">Status</th>
+                    <th class="w-32">Created</th>
+                    <th class="w-32">Completed</th>
+                    <th class="w-24">Locked</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="act in acts" :key="act.id">
+                    <tr>
+                      <td x-text="act.id"></td>
+                      <td class="font-mono text-xs">
+                        <span class="badge badge-xs mr-1" :class="typeBadgeClass(act.bp_type)" x-text="act.bp_type"></span>
+                        <span x-text="act.bp_slug"></span>
+                      </td>
+                      <td x-text="act.title"></td>
+                      <td><span class="badge badge-sm" :class="actStatusBadgeClass(act.status)" x-text="act.status"></span></td>
+                      <td class="text-xs opacity-70" x-text="formatDate(act.created_at)"></td>
+                      <td class="text-xs opacity-70" x-text="formatDate(act.completed_at)"></td>
+                      <td class="text-xs opacity-70" x-text="act.locked_by || '-'"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <input type="radio" name="main_tabs" role="tab" class="tab" aria-label="Attention" x-show="attention.length > 0" />
+          <div role="tabpanel" class="tab-content pt-4" x-show="attention.length > 0">
+            <div class="overflow-x-auto">
+              <table class="table table-sm table-zebra">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Type</th>
+                    <th>Slug</th>
+                    <th>Step</th>
+                    <th>Status</th>
+                    <th>Dirty Reason</th>
+                    <th>Locked</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="item in attention" :key="item.id">
+                    <tr class="bg-error bg-opacity-10">
+                      <td x-text="item.id"></td>
+                      <td><span class="badge badge-sm" :class="typeBadgeClass(item.type)" x-text="item.type"></span></td>
+                      <td class="font-mono text-xs" x-text="item.slug"></td>
+                      <td x-text="item.step"></td>
+                      <td><span class="badge badge-sm" :class="statusBadgeClass(item.step_status)" x-text="item.step_status"></span></td>
+                      <td class="text-xs text-error" x-text="item.dirty_reason || '-'"></td>
+                      <td class="text-xs opacity-70" x-text="item.locked_by || '-'"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="text-center text-xs opacity-50 pb-4">Blueprint-Flow UI</div>
+  </div>
+
+  <script>
+    function dashboard() {
+      return {
+        autoRefresh: false,
+        refreshInterval: null,
+        stats: {},
+        status: [],
+        progress: [],
+        cores: [],
+        dependencies: [],
+        attention: [],
+        acts: [],
+        expandedBp: null,
+        blueprintDetail: null,
+        coreDetails: {},
+
+        async init() { await this.loadAll(); },
+
+        async loadAll() {
+          try {
+            const results = await Promise.all(
+              ['/api/stats','/api/status','/api/progress','/api/cores',
+               '/api/dependencies','/api/attention','/api/acts'].map(u => fetch(u).then(r => r.json()))
+            );
+            [this.stats, this.status, this.progress, this.cores,
+             this.dependencies, this.attention, this.acts] = results;
+          } catch (e) { console.error('Load failed:', e); }
+        },
+
+        toggleBlueprintDetail(id) {
+          if (this.expandedBp === id) { this.expandedBp = null; this.blueprintDetail = null; return; }
+          this.expandedBp = id;
+          fetch(`/api/blueprint?id=${id}`).then(r=>r.json()).then(d=>{this.blueprintDetail=d;});
+        },
+
+        loadCoreDetail(slug, isOpen) {
+          if (!isOpen || this.coreDetails[slug]) return;
+          fetch(`/api/core?slug=${slug}`).then(r=>r.json()).then(d=>{this.coreDetails[slug]=d;});
+        },
+
+        toggleAutoRefresh() {
+          if (this.autoRefresh) { this.refreshInterval = setInterval(() => this.loadAll(), 5000); }
+          else if (this.refreshInterval) { clearInterval(this.refreshInterval); this.refreshInterval = null; }
+        },
+
+        completionRate() {
+          if (!this.stats.blueprints || this.stats.blueprints.total === 0) return 0;
+          return Math.round((this.stats.blueprints.done / this.stats.blueprints.total) * 100);
+        },
+        typeBadgeClass(t) { return {table:'badge-info',layout:'badge-secondary',partial:'badge-accent',action:'badge-warning',page:'badge-primary',test:'badge-ghost'}[t]||'badge-neutral'; },
+        statusBadgeClass(s) { return {todo:'badge-ghost',doing:'badge-warning',review:'badge-info',done:'badge-success'}[s]||'badge-neutral'; },
+        actStatusBadgeClass(s) { return {todo:'badge-ghost',doing:'badge-warning',done:'badge-success',failed:'badge-error'}[s]||'badge-neutral'; },
+        formatDate(d) { return d ? new Date(d).toLocaleString('ja-JP',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '-'; }
+      };
+    }
+  </script>
+</body>
+</html>

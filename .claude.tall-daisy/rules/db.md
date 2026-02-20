@@ -1,22 +1,54 @@
-# DB 規約
-> Migration命名・Seeder規約
+# DB Conventions
+> Migration naming, Seeder rules
 
 ## Migration
 
-- ファイル名 prefix: `0001_01_01_XXXXXX`（6桁の順序番号でグループ化）
+- Filename prefix: `0001_01_01_XXXXXX` (6-digit sequential grouping)
 
-| 番号帯 | 用途 | 例 |
-|--------|------|-----|
-| `000000-009999` | フレームワーク | cache, sessions, jobs |
-| `010000-019999` | マスタ/コア | users, roles |
-| `020000-029999` | ドメイン | 機能テーブル |
-| `030000-039999` | システムユーティリティ | audit_logs, notifications |
-| `040000+` | 追加機能グループ | 機能拡張時に追加 |
+| Range | Purpose | Example |
+|-------|---------|---------|
+| `000000-009999` | Framework | cache, sessions, jobs |
+| `010000-019999` | Master/Core | users, roles |
+| `020000-029999` | Domain | feature tables |
+| `030000-039999` | System utilities | audit_logs, notifications |
+| `040000+` | Additional groups | feature extensions |
 
-- グループ内は **10刻み** で番号付け（挿入余地を確保）
-- 開発中は **create ファイルを直接編集**（ファイル数増加防止）
+- Number in **increments of 10** within groups (leave room for insertion)
+- During development, **edit create files directly** (avoid file proliferation)
 
 ## Seeder
 
-- **Factory を使わない**。単純なコードで INSERT（速度優先）
-- `DatabaseSeeder` から各テーブル Seeder を呼び出し
+- **No Factory pattern** — simple `Model::create()` calls (speed priority)
+- Call each table seeder from `DatabaseSeeder`
+
+### Seeder Structure
+
+Each table blueprint creates a Seeder with two responsibilities:
+
+```php
+class TodoSeeder extends Seeder {
+    // 1. Standard seeder method (called by DatabaseSeeder)
+    public function run(): void {
+        static::createDefaults();
+    }
+
+    // 2. Static helpers (called by tests and other seeders)
+    public static function createDefaults(): array {
+        $user = UserSeeder::createDefaultUser();
+        return [
+            Todo::create(['user_id' => $user->id, 'title' => 'Task 1', 'status' => 'pending']),
+            Todo::create(['user_id' => $user->id, 'title' => 'Task 2', 'status' => 'done']),
+        ];
+    }
+}
+```
+
+### Usage Across Test Modes
+
+| Mode | How | Data lifecycle |
+|------|-----|---------------|
+| Unit/Feature tests | `RefreshDatabase` + `Seeder::createXxx()` | Auto-rollback per test |
+| E2E automated tests | Same Seeder methods | Refreshed per test |
+| Human manual testing | `php artisan db:seed` | Persistent until reset |
+
+Same Seeder, same data — single source of truth.

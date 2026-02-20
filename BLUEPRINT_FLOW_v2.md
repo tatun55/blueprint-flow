@@ -1,392 +1,323 @@
-# Blueprint-Flow v2 設計書
+# Blueprint-Flow v2
 
-> 3層構造のドキュメント駆動開発フレームワーク
+> Document-driven development framework with 3-layer architecture
 
 ---
 
-## 1. アーキテクチャ概要
+## 1. Architecture
 
-### 3層構造
-
-```
-core 層 (基盤)        プロジェクト全体の定義。全層から参照される
-blueprint 層 (定義)    機能・テーブル・テストの詳細定義。依存関係を持つ
-act 層 (指示書)        完全自己完結の作業指示。core + blueprint の必要情報を内包
-```
-
-### エージェント構成
+### 3 Layers
 
 ```
-ユーザー
+core layer (foundation)     Project-wide definitions. Referenced by all layers.
+blueprint layer (spec)      Feature/table/test definitions with dependencies. ~50% detail.
+act layer (task)            Implementation instructions + work log. ~75% detail.
+```
+
+### Detail Levels
+
+```
+blueprint (~50%)  →  act (~75%)  →  code (100%)
+  what to build       how to build     full implementation
+```
+
+### Agents
+
+```
+User
   │
   ▼
-Hub (メインエージェント)
-  │  ・blueprint.db の管理のみ
-  │  ・コーディング知識を持たない
-  │  ・人間との対話 (AskUserQuestion)
+Hub (Foreground)
+  │  DB read/write, orchestration, user communication
+  │  No code knowledge. Actively uses AskUserQuestion.
   │
-  ├─→ 指示書エージェント
-  │     core + blueprint → act 完全自己完結ドキュメントを生成
-  │
-  └─→ 作業エージェント (1種類)
-        act を受け取り実装。全タスクに対応
+  └─→ Coding Agent (Background)
+        Reads .claude/agents/coding.md for instructions.
+        Self-serves knowledge from DB (read-only).
+        Implements, captures screenshots, reports back.
 ```
 
-| 項目 | Hub | 指示書エージェント | 作業エージェント |
-|------|-----|--------------------|------------------|
-| 役割 | DB管理・オーケストレーション | act 指示書の生成 | act に基づく実装 |
-| コード知識 | なし | なし | あり |
-| ユーザー対話 | AskUserQuestion | なし | なし |
-| 実行モード | Foreground | Background | Background |
-| DB アクセス | 読み書き | 読み取り | なし |
+| Aspect | Hub | Coding Agent |
+|--------|-----|--------------|
+| Role | DB management, orchestration, proposals | Implementation based on act |
+| Code knowledge | None | Full |
+| User interaction | AskUserQuestion (active) | None |
+| Execution | Foreground | Background |
+| DB access | Read/write | Read-only |
+
+### Prohibitions (CRITICAL)
+
+**Hub:**
+
+<hub-prohibitions>
+- NEVER read or write source code files
+- NEVER run system commands (build, test, install, migrate)
+- NEVER make judgments about source code implementation details
+- NEVER decide outside blueprint scope without user consent
+</hub-prohibitions>
+
+Hub SHOULD actively use AskUserQuestion and propose based on specification knowledge.
+
+**Coding Agent:**
+
+<coding-prohibitions>
+- NEVER use AskUserQuestion — only Hub communicates with the user
+- NEVER write to blueprint.db — read-only access only
+- NEVER modify code outside act/blueprint scope
+- NEVER add or remove packages unless explicitly instructed in the act
+- NEVER change architecture (directory structure, design patterns)
+- ALWAYS stop and report when discovering problems or improvement opportunities
+</coding-prohibitions>
 
 ---
 
-## 2. データベース定義
+## 2. Database
 
-### テーブル
+### Tables
 
 ```sql
--- =========================================
--- core 層: プロジェクト基盤
--- =========================================
--- overview: アプリ概要・機能一覧
--- config:   ビジネスルール・定数・業務知識
--- tech:     技術スタック・コーディングルール・フロー定義
+-- core layer: project foundation
+-- overview: app summary, feature list
+-- config:   business rules, constants, domain knowledge
+-- tech:     tech stack, coding rules, flow definitions
 CREATE TABLE cores (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     type       TEXT NOT NULL,          -- overview / config / tech
     slug       TEXT NOT NULL UNIQUE,
     name       TEXT NOT NULL,
-    summary    TEXT NOT NULL,           -- 20-40字の要約（Hub の全体把握用）
+    summary    TEXT NOT NULL,           -- 20-40 char summary for Hub context
     content    TEXT NOT NULL,           -- Markdown
     reviewed   BOOLEAN DEFAULT 0,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- =========================================
--- blueprint 層: 機能定義
--- =========================================
--- page:    ページ定義
--- partial: 部品定義
--- action:  バックエンド処理定義
--- table:   テーブル定義
--- layout:  レイアウト定義
--- test:    テスト定義 (parent_id で対象 blueprint に紐づけ)
+-- blueprint layer: feature definitions (~50% detail)
+-- page / partial / action / table / layout / test
 CREATE TABLE blueprints (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    type        TEXT NOT NULL,          -- page / partial / action / table / layout / test
+    type        TEXT NOT NULL,
     slug        TEXT NOT NULL,
     name        TEXT NOT NULL,
-    summary     TEXT NOT NULL,           -- 20-40字の機能要約（Hub の全体把握用）
-    content     TEXT NOT NULL,           -- Markdown（具体シナリオまで含む）
+    summary     TEXT NOT NULL,
+    content     TEXT NOT NULL,           -- Markdown spec with scenarios
 
-    -- パイプライン（step の有効値は core tech のフロー定義に準拠）
     step        TEXT NOT NULL DEFAULT 'define',
     step_status TEXT NOT NULL DEFAULT 'todo'
                 CHECK(step_status IN ('todo', 'doing', 'review', 'done')),
-    locked_by   TEXT,                   -- 作業中のエージェント名
+    locked_by   TEXT,
 
-    -- 無効化（上流変更時にマーク）
     dirty        BOOLEAN DEFAULT 0,
     dirty_reason TEXT,
 
-    -- テスト用（type = 'test' の場合のみ使用）
-    parent_id   INTEGER REFERENCES blueprints(id),
-    test_level  INTEGER,                -- 1 / 2 / 3
+    parent_id   INTEGER REFERENCES blueprints(id),  -- for type='test'
+    test_level  INTEGER,                             -- 1 / 2 / 3
 
     updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(type, slug)
 );
 
--- =========================================
--- act 層: 指示書（完全自己完結）
--- =========================================
+-- act layer: implementation instructions + work log (~75% detail)
 CREATE TABLE acts (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     blueprint_id INTEGER NOT NULL REFERENCES blueprints(id),
     title        TEXT NOT NULL,
-    content      TEXT NOT NULL,          -- 全情報を内包した完結ドキュメント
+    content      TEXT NOT NULL DEFAULT '',  -- implementation details + Hub notes
 
     status       TEXT NOT NULL DEFAULT 'todo'
                  CHECK(status IN ('todo', 'doing', 'done', 'failed')),
-    locked_by    TEXT,                   -- 作業中のエージェント名
-    result       TEXT,                   -- エージェントの作業報告
+    locked_by    TEXT,
+    result       TEXT,                      -- structured agent report
 
     created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
     completed_at DATETIME
 );
 
--- =========================================
--- 依存関係（blueprint 間）
--- =========================================
+-- knowledge sets: blueprint type → rule slug mapping
+-- Coding agent uses this to self-serve rules from DB
+CREATE TABLE knowledge_sets (
+    blueprint_type TEXT NOT NULL,
+    rule_slug      TEXT NOT NULL,
+    UNIQUE(blueprint_type, rule_slug)
+);
+
+-- dependencies between blueprints
 CREATE TABLE dependencies (
     source_id INTEGER NOT NULL REFERENCES blueprints(id),
     target_id INTEGER NOT NULL REFERENCES blueprints(id),
-    detail    TEXT,                      -- 例: "users.id, users.role"
+    detail    TEXT,                         -- e.g. "users.id, users.role"
     UNIQUE(source_id, target_id)
 );
 ```
 
-### VIEW（進捗可視化）
+### VIEWs
 
-```sql
--- ★ アプリ全体像（Hub は常にこれを参照してコンテキストを維持する）
-CREATE VIEW app_snapshot AS
--- core 層: アプリ概要・ビジネスルール・技術情報
-SELECT 1 as sort, 'core' as layer, type, slug, name, summary
-FROM cores
-UNION ALL
--- blueprint 層: 機能一覧（テスト除く）
-SELECT 2 as sort, type as layer, type, slug, name, summary
-FROM blueprints WHERE type != 'test'
-UNION ALL
--- blueprint 層: テスト定義
-SELECT 3 as sort, 'test' as layer, type,
-    slug, name, summary
-FROM blueprints WHERE type = 'test'
-ORDER BY sort, layer, slug;
-
--- ① プロジェクト全体の進捗（step 別の集計）
-CREATE VIEW project_progress AS
-SELECT
-    step,
-    COUNT(*) as total,
-    SUM(step_status = 'done') as completed,
-    SUM(step_status = 'doing') as in_progress,
-    SUM(step_status = 'review') as in_review,
-    SUM(dirty = 1) as dirty_count
-FROM blueprints
-WHERE type != 'test'
-GROUP BY step
-ORDER BY MIN(id);
-
--- ② 全アイテムのステータス一覧
-CREATE VIEW item_status AS
-SELECT
-    id, type, slug, name,
-    step, step_status, locked_by,
-    dirty, dirty_reason
-FROM blueprints
-ORDER BY type, id;
-
--- ③ 次にやるべきこと（依存解決済み・完了待ち）
-CREATE VIEW next_actions AS
-SELECT b.id, b.type, b.slug, b.name, b.step, b.step_status
-FROM blueprints b
-WHERE b.step_status = 'done'
-  AND b.dirty = 0
-  AND b.step != 'done'
-  AND NOT EXISTS (
-    SELECT 1 FROM dependencies dep
-    JOIN blueprints blocker ON dep.target_id = blocker.id
-    WHERE dep.source_id = b.id
-      AND (blocker.step_status != 'done' OR blocker.dirty = 1)
-  );
-
--- ④ 要注意アイテム（dirty または作業中）
-CREATE VIEW attention_needed AS
-SELECT
-    id, type, slug, name,
-    step, step_status,
-    dirty_reason, locked_by
-FROM blueprints
-WHERE dirty = 1 OR locked_by IS NOT NULL;
-
--- ⑤ テストカバレッジ
-CREATE VIEW test_coverage AS
-SELECT
-    b.id, b.type, b.slug, b.name,
-    MAX(CASE WHEN t.test_level = 1 THEN t.step_status END) as l1,
-    MAX(CASE WHEN t.test_level = 2 THEN t.step_status END) as l2,
-    MAX(CASE WHEN t.test_level = 3 THEN t.step_status END) as l3
-FROM blueprints b
-LEFT JOIN blueprints t ON t.parent_id = b.id AND t.type = 'test'
-WHERE b.type != 'test'
-GROUP BY b.id;
-
--- ⑥ 依存関係マップ（可読表示）
-CREATE VIEW dependency_map AS
-SELECT
-    s.type || '/' || s.slug as item,
-    t.type || '/' || t.slug as depends_on,
-    t.step as dep_step,
-    t.step_status as dep_status,
-    dep.detail
-FROM dependencies dep
-JOIN blueprints s ON dep.source_id = s.id
-JOIN blueprints t ON dep.target_id = t.id;
-
--- ⑦ act タスクボード（未完了タスク）
-CREATE VIEW task_board AS
-SELECT
-    a.id, a.title, a.status, a.locked_by,
-    b.type as bp_type, b.slug as bp_slug
-FROM acts a
-JOIN blueprints b ON a.blueprint_id = b.id
-WHERE a.status != 'done'
-ORDER BY a.created_at;
-```
+| VIEW | Purpose |
+|------|---------|
+| `app_snapshot` | Full project picture (Hub reads on every session start) |
+| `project_progress` | Step-level aggregation |
+| `item_status` | All blueprint statuses |
+| `next_actions` | Ready items (dependencies resolved, step_status='done') |
+| `attention_needed` | Dirty items + locked items + review-pending |
+| `test_coverage` | L1/L2/L3 status per blueprint |
+| `dependency_map` | Human-readable dependency display |
+| `task_board` | Active acts (not done) |
 
 ---
 
-## 3. core 層: プロジェクト基盤
+## 3. Core Layer
 
-### セクション構成
+| type | Content | Example |
+|------|---------|---------|
+| `overview` | App summary, feature list | App name, purpose, main features |
+| `config` | Business rules, constants, domain knowledge | Status values, permission definitions |
+| `tech` | Tech stack, coding rules, flow definitions | Seeded from `rules/*.md` files |
 
-| type | 内容 | 例 |
-|------|------|-----|
-| `overview` | アプリ概要・機能一覧 | アプリ名、目的、主要機能リスト |
-| `config` | ビジネスルール・定数・業務知識 | ステータス値、権限定義、バリデーション規則 |
-| `tech` | 技術スタック・コーディングルール・フロー定義 | 使用技術、命名規則、プロジェクトフロー、アイテムフロー |
+### summary vs content
 
-### summary と content
+- **summary** (20-40 chars): Minimal context for Hub via `app_snapshot` VIEW
+- **content** (Markdown): Full specification text
 
-**summary** (20-40字): Hub がアプリ全体像を最小トークンで把握するための要約。
-`app_snapshot` VIEW 経由で常時参照される。
+### Content Quality (CRITICAL)
 
-```
-例: "ユーザーの認証・権限管理を行うマスタテーブル"
-例: "タスクの一覧表示・作成・完了切替・削除を行うメインページ"
-```
-
-**content** (Markdown): 全て Markdown テキスト。人間が読み書きしやすく、LLM も解釈しやすい。
-
-### content 品質ルール（CRITICAL）
-
-content は以下の基準を満たすこと:
-
-1. **意図が明確**: 何を実現したいかが曖昧さなく伝わる
-2. **コーディング可能**: LLM エージェントがこれだけ読めば迷わず実装に着手できる
-3. **必要十分**: 不要な背景説明や冗長な記述を排除し、判断に必要な情報だけを含む
-4. **過不足なし**: 詳細すぎて実装の自由度を奪わず、簡略すぎて解釈が分かれることもない
-
-```
-GOOD: "ログインフォーム。email + password。バリデーション失敗時は
-      フィールド直下にエラー表示。成功時は /dashboard にリダイレクト"
-
-BAD (詳細すぎ): "emailフィールドはinput type=emailでname属性は'email'、
-      classは'form-input'で、placeholderは'メールアドレス'で..."
-
-BAD (簡略すぎ): "ログイン画面を作る"
-```
-
-### tech セクションのフロー定義
-
-`tech` セクションの content 内に、以下の2つのフローを定義する:
-
-**プロジェクトフロー**（全体のマイルストーン）:
-
-```markdown
-## プロジェクトフロー
-
-1. 概要定義 → レビュー
-2. 機能設計 → レビュー
-3. DB設計 → レビュー
-4. 実装 → レビュー
-5. テストL1 → レビュー
-6. テストL2 → レビュー（全L1完了後）
-7. テストL3 → レビュー（全L2完了後）
-```
-
-**アイテムフロー**（blueprint タイプ別のステップ定義）:
-
-```markdown
-## アイテムフロー
-
-### page / partial / action
-define → impl → test_l1 → test_l2 → test_l3 → done
-
-### table
-define → seed → impl → done
-
-### layout
-define → impl → done
-
-### test
-define → done
-```
+1. **Clear intent**: No ambiguity in what to achieve
+2. **Codeable**: An LLM agent can start implementing from this alone
+3. **Sufficient**: Contains all necessary information, no more
+4. **Balanced**: Not so detailed it constrains implementation, not so brief it invites interpretation
 
 ---
 
-## 4. blueprint 層: 機能定義
+## 4. Blueprint Layer (~50% detail)
 
-### タイプ一覧
+### Types
 
-| type | 説明 | 依存先の例 |
-|------|------|-----------|
-| `page` | ページ定義（ルート・レイアウト・操作・表示要素） | table, layout, partial |
-| `partial` | 再利用可能な部品定義 | table |
-| `action` | バックエンド処理定義（Action, Job, Event） | table |
-| `table` | テーブル定義（カラム・リレーション・シーダー） | 他の table |
-| `layout` | レイアウト定義（ヘッダー・サイドバー・フッター構成） | なし |
-| `test` | テスト定義（具体シナリオ含む） | 対象の blueprint (parent_id) |
+| type | Description | Depends on |
+|------|-------------|-----------|
+| `page` | Page definition (route, layout, operations, display) | table, layout, partial |
+| `partial` | Reusable component definition | table |
+| `action` | Backend logic (Action, Job, Event) | table |
+| `table` | Table definition (columns, relations, seeder) | other tables |
+| `layout` | Layout definition (header, sidebar, footer) | none |
+| `test` | Test definition with specific scenarios | target blueprint (parent_id) |
 
-### content の記述方針
-
-- **Markdown テキスト**で記述
-- LLM エージェントが迷わない程度に詳細
-- 過剰な情報は省き、意図が明確な必要十分の記述
-- テスト定義（type='test'）には具体的なテストシナリオまで含む
-
-### テスト定義の紐づけ
+### Test Binding
 
 ```
 blueprint (page/todo-index)
-  └── blueprint test (parent_id=上記, test_level=1) "基本操作テスト"
-  └── blueprint test (parent_id=上記, test_level=2) "追加操作テスト"
-  └── blueprint test (parent_id=上記, test_level=3) "エッジケーステスト"
+  └── test (parent_id=above, test_level=1) "Basic operation tests"
+  └── test (parent_id=above, test_level=2) "Extended tests"
+  └── test (parent_id=above, test_level=3) "Edge case tests"
 ```
 
-テスト定義は対象 blueprint ごと・レベルごとに別レコードとして作成する。
+### Pipeline
 
-### パイプライン
+Each blueprint tracks progress via `step` × `step_status`:
 
-各 blueprint は `step` と `step_status` で進捗を追跡する。
+**step**: Defined per type in core tech flow definitions
 
-**step**: core tech のアイテムフローに定義された値（タイプ別に異なる）
-
-**step_status**: 各ステップ内での状態
+**step_status**: State within each step
 
 ```
 todo → doing → review → done
         ↑         │
-   locked_by   人間レビュー
+   locked_by   user review (can be deferred)
 ```
 
-- `todo`: まだ着手していない
-- `doing`: エージェントが作業中（`locked_by` にエージェント名）
-- `review`: 作業完了、人間レビュー待ち
-- `done`: レビュー完了、次のステップへ進める
+- `todo`: Not started
+- `doing`: Agent working (`locked_by` set)
+- `review`: Work complete, awaiting user review
+- `done`: Review passed, ready to advance to next step
 
-`step_status = 'done'` になったら、Hub が次の `step` に遷移させる。
+### Item Flow (per type)
 
-### ゲート条件
+```
+page / partial / action:  define → impl → test_l1 → test_l2 → test_l3 → done
+table:                    define → seed → impl → done
+layout:                   define → impl → done
+test:                     define → done
+```
 
-一部のステップには全体ゲートがある:
+### Impl Step: Test-First Development
 
-| ステップ | ゲート条件 |
-|----------|-----------|
-| `test_l2` | 全 blueprint の `test_l1` が完了済み |
-| `test_l3` | 全 blueprint の `test_l2` が完了済み |
+The `impl` step includes test-first development by default:
+
+1. Write unit/feature tests from blueprint scenarios (Red)
+2. Implement code to pass tests (Green)
+3. Run tests, iterate until all pass
+4. Verify blueprint-match (spec vs implementation)
+5. Capture screenshots (UI types only)
+
+This behavior is defined in `testing` rules and is configurable per project.
+
+### Gates
+
+| Step | Gate condition |
+|------|---------------|
+| `test_l2` | ALL blueprints' `test_l1` complete |
+| `test_l3` | ALL blueprints' `test_l2` complete |
 
 ---
 
-## 5. act 層: 指示書
+## 5. Act Layer (~75% detail)
 
-### 設計原則
+### Role
 
-- **完全自己完結**: act だけでエージェントが作業可能。core/blueprint の参照不要
-- **1タスク = 1ファイル**: 全情報が1つのドキュメントに集約
-- **重複は許容**: core/blueprint の情報を意図的にコピー・埋め込み
+Acts bridge blueprint specifications and code implementation:
+- **blueprint.content** (~50%): What to build
+- **act.content** (~75%): How to build — file paths, component structure, edge cases, past feedback
+- **Code** (100%): Full implementation
 
-### 知識セット（CRITICAL: Hub が act 生成時に必ず参照）
+### act.content
 
-blueprint の type に応じて、act に埋め込むルールが決まる。
-Hub は下表に基づいて DB から該当ルールを取得し、指示書エージェントに渡す。
+Hub writes implementation-level details:
+- Target file paths and component structure
+- Specific implementation decisions
+- Edge cases to handle
+- Past feedback or failure notes (if retry)
 
-| type | 知識セット (rules-*) |
-|------|---------------------|
+### act.result
+
+Coding agent writes a structured report:
+```
+- status: done | blocked | found_issues
+- files: [list of changed files]
+- summary: [1-2 line description]
+- blueprint-match:
+  - ✓ scenario description
+  - ✗ scenario description (reason)
+- test-results: [X passed, Y failed — details if any failures]
+- screenshots: [paths or N/A]
+- issues: [problems or improvement ideas]
+- notes: [interruption reasons, alternatives]
+```
+
+### Knowledge Self-Service
+
+Coding agent queries DB to gather all needed context:
+
+```bash
+DB="blueprint/blueprint.db"
+
+# 1. Get act + blueprint
+sqlite3 -json $DB "SELECT a.*, b.type as bp_type, b.slug as bp_slug, b.content as bp_content
+    FROM acts a JOIN blueprints b ON a.blueprint_id = b.id WHERE a.id = {act_id}"
+
+# 2. Get rules for this blueprint type
+sqlite3 -json $DB "SELECT c.slug, c.content FROM cores c
+    JOIN knowledge_sets ks ON c.slug = 'rules-' || ks.rule_slug
+    WHERE ks.blueprint_type = '{bp_type}'"
+
+# 3. Get dependency content
+sqlite3 -json $DB "SELECT b.type, b.slug, b.content FROM blueprints b
+    JOIN dependencies d ON d.target_id = b.id WHERE d.source_id = {blueprint_id}"
+
+# 4. Get overview and config
+sqlite3 -json $DB "SELECT slug, content FROM cores WHERE type IN ('overview', 'config')"
+```
+
+### Knowledge Sets
+
+| blueprint type | rules loaded |
+|---------------|-------------|
 | `page` | stack, architecture, ui, data, auth, style |
 | `partial` | stack, architecture, ui, data, style |
 | `action` | stack, data, auth, style |
@@ -394,223 +325,219 @@ Hub は下表に基づいて DB から該当ルールを取得し、指示書エ
 | `layout` | stack, architecture, ui, style |
 | `test` | stack, testing, style |
 
-- 全タイプに `stack` と `style` を含む
-- `flow` は Hub 専用（act には含めない）
-- 指示書エージェントは上記 + 対象 blueprint + 依存先 blueprint の content を act に埋め込む
-- 不足より過多が望ましい。迷ったら含める
+- All types include `stack` and `style`
+- `flow` is Hub-only (not included in acts)
+- When in doubt, include more rather than less
 
-```bash
-# Hub が知識セットを取得するクエリ例（page の場合）
-sqlite3 -json $DB "SELECT slug, content FROM cores WHERE slug IN (
-    'rules-stack','rules-architecture','rules-ui','rules-data','rules-auth','rules-style'
-)"
-```
+### Test Data Strategy
 
-### 生成フロー
+- **Seeder-based** — no Factory pattern (speed priority)
+- **Single source**: Same Seeder used for unit/feature tests, E2E tests, and human testing
+- Each table blueprint creates a Seeder with `run()` + static helper methods
+- Shared test fixtures in `tests/Helpers/` for dependency boundary checks
+- In-memory lifecycle: `RefreshDatabase` trait for all automated tests
 
-```
-Hub が blueprint の step を進める
-  ↓
-Hub が知識セット表に基づき、該当ルールを DB から取得
-  ↓
-Hub が「指示書エージェント」を起動（ルール + blueprint + 依存情報を渡す）
-  ↓
-指示書エージェントが act (完全自己完結ドキュメント) を生成して DB に保存
-  ↓
-Hub が「作業エージェント」を act で起動
-```
+### Dependency Test Rules
 
-### content の構成例
-
-```markdown
-# タスク: TodoIndex ページ実装
-
-## コンテキスト
-（core overview から抜粋）
-（core tech からスタック・コーディングルール）
-（core config からビジネスルール・定数）
-
-## 対象定義
-（blueprint page/todo-index の content）
-
-## 依存情報
-（blueprint table/tasks の content）
-（blueprint layout/main の content）
-
-## 作業指示
-- 具体的な実装指示
-- ファイルパス・命名規則
-- 注意事項
-
-## テスト方針
-（blueprint test の content から、このタスクに関連する部分）
-
-## 成果物
-- 作成すべきファイル一覧
-- 完了条件
-```
+1. **Own-scope only**: Assert only on current blueprint's behavior
+2. **Seeder as fixture**: Use dependency Seeders' static helpers for test data
+3. **Boundary check**: Verify correct interaction with dependencies via shared fixture helpers
 
 ---
 
-## 6. 依存関係
+## 6. Review Process
 
-### blueprint 間の依存
+### Flow
+
+<flow name="review">
+  <step>Coding agent completes → Hub receives Task output</step>
+  <step>Hub saves report to act.result</step>
+  <step>Hub sets step_status='review'</step>
+  <step>Hub presents review via AskUserQuestion</step>
+  <step>User chooses: approve / request changes / defer</step>
+</flow>
+
+### Review Options
+
+| Option | Action |
+|--------|--------|
+| **Approve** | `step_status='done'`, advance to next step |
+| **Request changes** | Create new act with feedback, `step_status='doing'` |
+| **Defer** | `step_status` stays `'review'`, continue other work |
+
+Deferred reviews appear in `attention_needed` VIEW and are reminded on next `/bpf` session.
+
+### Screenshots
+
+For UI work (page, partial, layout), the Coding agent captures screenshots:
+- Saved to `blueprint/reviews/{act_id}/`
+- `before.png` (for modifications) and `after.png`
+- Hub shows screenshot **paths** to user (does NOT read image files)
+- Non-UI tasks skip screenshots
+
+---
+
+## 7. Dependencies
+
+### Between Blueprints
 
 ```sql
--- source_id が target_id に依存する
 INSERT INTO dependencies (source_id, target_id, detail)
 VALUES (3, 1, 'users.id, users.role');
 ```
 
-`detail` には、具体的にどの部分に依存しているかを記述可能（カラム名など）。
+### Usage
 
-### 依存の用途
+1. **Execution order**: Don't start until dependencies are complete
+2. **Dirty propagation**: Consider dirty flag when dependency changes
+3. **Knowledge gathering**: Coding agent reads dependency content
 
-1. **実行順序の制御**: 依存先が完了するまで着手しない
-2. **無効化の伝播**: 依存先が変更されたら dirty フラグを検討
-3. **act 生成時の情報収集**: 依存先の content も act に埋め込む
+---
 
-### 確認方法
+## 8. Dirty Flags & Rollback
 
-```bash
-# 依存関係の全体像
-SELECT * FROM dependency_map;
+### Flow
 
-# 特定アイテムのブロッカー確認
-SELECT * FROM dependency_map WHERE item = 'page/todo-index';
+```
+Upstream blueprint changes (e.g. table/users columns)
+  ↓
+Downstream blueprints marked dirty=1 (e.g. page/user-profile)
+  ↓
+Hub evaluates impact via dependency_map
+  ↓
+AskUserQuestion: user chooses
+  - Clear dirty (impact is minor)
+  - Rollback step (re-implement needed)
+  - Modify spec
 ```
 
 ---
 
-## 7. 無効化と巻き戻し
+## 9. Hub Operations
 
-### dirty フラグ
+### DB Helper (CRITICAL)
 
-上流の blueprint が変更された場合、下流の blueprint に `dirty = 1` をマークする。
-
-```
-table/users のカラムを変更
-  ↓
-page/user-profile (depends_on: table/users) → dirty = 1
-  ↓
-Hub が影響を評価
-  ↓
-AskUserQuestion で人間に判断を仰ぐ:
-  - dirty のまま進める（影響軽微）
-  - step を巻き戻す（再実装が必要）
-  - 仕様を変更する
-```
-
-### Hub の判断フロー
-
-1. `dirty_reason` に変更内容を記録
-2. 依存の `detail` を参照して影響範囲を評価
-3. `AskUserQuestion` で人間に選択肢を提示
-4. 人間の判断に基づき、step の巻き戻しまたは dirty 解除を実行
-
----
-
-## 8. Hub の操作パターン
-
-### 初動クエリ（CRITICAL: 毎回の会話開始時に必ず実行）
+All DB writes MUST use `hub.py` — never raw `sqlite3` commands for inserts/updates.
+Hub.py uses parameter binding to prevent SQL escaping issues with markdown content.
 
 ```bash
-DB="blueprint/blueprint.db"
+HUB="python3 .blueprint-flow/blueprint/hub.py"
 
-# アプリ全体像（最小トークンで全体把握）
-sqlite3 -json $DB "SELECT * FROM app_snapshot"
+# --- Read ---
+$HUB status                              # All blueprints overview
+$HUB view app_snapshot                    # Full project picture
+$HUB view next_actions                    # Ready items
+$HUB view attention_needed               # Issues
+
+# --- Write (content via stdin for markdown safety) ---
+echo "content" | $HUB upsert-core <type> <slug> <name> <summary>
+echo "content" | $HUB upsert-blueprint <type> <slug> <name> <summary>
+$HUB add-dep <source_id> <target_id>
+
+# --- Status transitions ---
+$HUB approve <id>                         # step_status → 'done'
+$HUB advance <id>                         # step → next step (auto per type)
+$HUB lock <id> [locked_by]               # step_status → 'doing'
+$HUB review <id>                          # step_status → 'review'
+
+# --- Acts ---
+echo "act content" | $HUB create-act <blueprint_id> <title>
+echo "report" | $HUB save-result <act_id> [status]
+
+# --- Dirty flags ---
+$HUB dirty <id> <reason>
+$HUB clear-dirty <id>
 ```
 
-Hub はこの結果を常に頭に置き、全ての判断の基盤とする。
-
-### 日常クエリ
-
-```bash
-# プロジェクト全体の進捗
-sqlite3 -json $DB "SELECT * FROM project_progress"
-
-# 全アイテムの状況
-sqlite3 -json $DB "SELECT * FROM item_status"
-
-# 次にやるべきこと
-sqlite3 -json $DB "SELECT * FROM next_actions"
-
-# 問題のあるアイテム
-sqlite3 -json $DB "SELECT * FROM attention_needed"
-
-# テストカバレッジ
-sqlite3 -json $DB "SELECT * FROM test_coverage"
-
-# 進行中タスク
-sqlite3 -json $DB "SELECT * FROM task_board"
-```
-
-### ステータス更新
-
-```bash
-# 作業開始（ロック）
-sqlite3 $DB "UPDATE blueprints SET step_status = 'doing', locked_by = 'worker' WHERE id = {id}"
-
-# 作業完了 → レビュー待ち
-sqlite3 $DB "UPDATE blueprints SET step_status = 'review', locked_by = NULL WHERE id = {id}"
-
-# レビュー完了 → 次のステップへ
-sqlite3 $DB "UPDATE blueprints SET step = '{next_step}', step_status = 'todo' WHERE id = {id}"
-
-# dirty マーク
-sqlite3 $DB "UPDATE blueprints SET dirty = 1, dirty_reason = '{reason}' WHERE id = {id}"
-
-# dirty 解除
-sqlite3 $DB "UPDATE blueprints SET dirty = 0, dirty_reason = NULL WHERE id = {id}"
-```
-
-### エージェント起動
+### Agent Launch
 
 ```
 Task tool:
-  - subagent_type: "general-purpose"
-  - prompt: "指示書エージェントとして実行: blueprint_id={id}"
-  - run_in_background: true
-
-Task tool:
-  - subagent_type: "general-purpose"
-  - prompt: "作業エージェントとして実行: act_id={id}"
-  - run_in_background: true
+  subagent_type: "general-purpose"
+  prompt: "Read .claude/agents/coding.md and follow its instructions. act_id={id}"
+  run_in_background: true
 ```
 
 ---
 
-## 9. 開発サイクル例
+## 10. Development Cycle
 
 ```
-User: 「タスク管理アプリを作りたい」
+User: "I want to build a task management app"
 
 Hub:
-  1. AskUserQuestion で要件確認
-  2. core overview を作成 → ユーザーレビュー
-  3. core config を作成（ビジネスルール・定数）→ ユーザーレビュー
-  4. core tech を作成（スタック・ルール・フロー定義）→ ユーザーレビュー
-  5. blueprint table/tasks を作成 → ユーザーレビュー
-  6. blueprint layout/main を作成 → ユーザーレビュー
-  7. blueprint page/todo-index を作成 → ユーザーレビュー
-  8. blueprint test (level=1, parent=page/todo-index) を作成 → ユーザーレビュー
-  9. 指示書エージェント起動 → act 生成
- 10. 作業エージェント起動 → 実装
- 11. レビュー → 次のステップへ
+  1. AskUserQuestion to clarify requirements
+  2. Create core/overview → user review
+  3. Create core/config (business rules) → user review
+  4. Verify core/tech rules are seeded
+  5. Create blueprint table/tasks → user review
+  6. Create blueprint layout/main → user review
+  7. Create blueprint page/todo-index → user review
+  8. Create blueprint test (level=1, parent=page/todo-index) → user review
+  9. Create act with 75% detail → launch Coding agent
+ 10. Coding agent self-serves knowledge → TDD (tests first → impl → verify) → reports
+ 11. Hub presents review → user approves / requests changes / defers
+ 12. Advance to next step or iterate
 ```
 
 ---
 
-## 10. v1 からの主な変更点
+## 11. Night-Runner (Autonomous Mode)
 
-| 項目 | v1 | v2 |
-|------|----|----|
-| 仕様管理 | 1テーブル (specs) + JSON data | 3層 (cores, blueprints, acts) |
-| content 形式 | JSON | Markdown |
-| エージェント | 5種類 (db-architect, livewire, artisan, tester, blueprint-flow) | 2種類 (指示書エージェント, 作業エージェント) |
-| フロー定義 | コード内に暗黙的 | core tech にテキストで明示 |
-| ステータス | 7段階の線形フロー + human_reviewed 4段階 | step × step_status (4値) + dirty フラグ |
-| 進捗確認 | 複雑な SQL | VIEW で1行クエリ |
-| テスト管理 | test category の spec + e2e_screenshots テーブル | blueprint test レコード (level 1-3) |
-| 指示書 | spec.data の JSON に全情報 | act 完全自己完結 Markdown ドキュメント |
-| 巻き戻し | カスケードリセット（自動） | dirty フラグ + 人間判断 |
+### Overview
+
+`/night-runner` executes the entire implementation pipeline autonomously after blueprints are defined.
+Same DB, same pipeline as `/bpf` — switchable at any time.
+
+### Differences from /bpf
+
+| Aspect | /bpf (Hub) | /night-runner |
+|--------|-----------|---------------|
+| Review | Human: approve / changes / defer | Auto: quality gate (tests + blueprint-match) |
+| Act creation | Hub writes 75% detail | Minimal (coding agent self-serves) |
+| Retry | Human creates new act | Auto: structured feedback, max 3 retries |
+| Execution order | Human decides | Topological sort from dependency graph |
+| Escalation | N/A | `dirty=1` with reason after 3 failures |
+
+### Quality Gate
+
+```
+Tier 1: test-results — all tests pass?
+Tier 2: blueprint-match — all scenarios ✓?
+Tier 3: status — not 'blocked' or 'found_issues'?
+```
+
+All pass → advance step. Any fail → retry with feedback.
+
+### Self-Correction Loop
+
+```
+Attempt 1 → quality gate FAIL → new act with feedback
+Attempt 2 → quality gate FAIL → progress check
+Attempt 3 → quality gate FAIL → dirty=1, skip dependents
+```
+
+Max 3 retries per blueprint/step. Exhausted retries escalate to human via `dirty` flag.
+
+### Mode Switching
+
+Safe to switch at any time:
+- `/night-runner` → `/bpf`: Unlock night-runner items, dirty items appear in attention_needed
+- `/bpf` → `/night-runner`: Night-runner picks up from current DB state
+
+---
+
+## 12. Changes from v1
+
+| Aspect | v1 | v2 |
+|--------|----|----|
+| Spec management | 1 table (specs) + JSON data | 3 layers (cores, blueprints, acts) |
+| Content format | JSON | Markdown |
+| Agents | 5 types (db-architect, livewire, artisan, tester, blueprint-flow) | 1 type (Coding agent, DB read-only self-serve) |
+| Flow definition | Implicit in code | Explicit text in core tech |
+| Status | 7-stage linear + 4-stage human_reviewed | step × step_status (4 values) + dirty flag |
+| Progress | Complex SQL | VIEWs with 1-line queries |
+| Test management | spec + e2e_screenshots table | blueprint test records (level 1-3) |
+| Instructions | JSON in spec.data | act (75% detail) + self-serve rules from DB |
+| Rollback | Cascading auto-reset | Dirty flag + human decision |
+| Review | Undefined | Structured: approve / request changes / defer |

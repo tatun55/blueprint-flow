@@ -1,33 +1,33 @@
-# データ層ルール
-> Model・バリデーション・Action・クエリ・データ共有
+# Data Layer Rules
+> Model, validation, Actions, queries, data sharing
 
 ## Model
 
-- **スリム Model**: リレーション・スコープ・$casts のみ
-- ビジネスロジックは Model に書かない
+- **Slim Model**: relations, scopes, and $casts only
+- No business logic in models
 
-## バリデーション
+## Validation
 
-- **Model 内**にルールを定義
+- Rules defined **inside the Model**
 
-## Action パターン
+## Action Pattern
 
-- 小規模なロジック → Livewire コンポーネント内に直接記述
-- 複数箇所で再利用・複雑なロジック → `app/Actions/` に切り出し
+- Small logic → directly in Livewire component
+- Reusable/complex logic → extract to `app/Actions/`
 
-## データ共有
+## Data Sharing
 
-- Livewire 標準パターン:
-  - 親→子: props 渡し
-  - 子→親: dispatch イベント
-  - ページ間: URL パラメータ / session
+- Livewire standard patterns:
+  - Parent → Child: props
+  - Child → Parent: dispatch events
+  - Between pages: URL parameters / session
 
-## クエリ
+## Queries
 
-- 基本は **Eloquent** 主体
-- 複雑な集計・レポートは **Query Builder** や生 SQL も使用
+- **Eloquent** as primary
+- **Query Builder** or raw SQL for complex aggregations/reports
 
 ## Job / Queue / Event
 
-- **最小限の使用**: メール送信など本当に非同期が必要な場合のみ
-- Event/Listener は使わず直接呼び出しを基本とする
+- **Minimal usage**: only for truly async needs (e.g., email sending)
+- Prefer direct calls over Event/Listener pattern
