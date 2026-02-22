@@ -10,9 +10,9 @@
 | Laravel | 12 | PHP framework |
 | Livewire | 4 | Full-page components |
 | Tailwind CSS | 4 | Utility-first CSS |
-| daisyUI | 5 | Tailwind CSS component library |
+| daisyUI | 5 | セマンティックカラー + テーマ機能のみ（コンポーネントクラス使用禁止） |
 | Alpine.js | 3 | Lightweight JS (UI state only) |
-| xylph-ui | - | Custom static UI components (Alpine.js + daisyUI) |
+| xylph-ui | - | Custom static UI components (Alpine.js + Tailwind CSS) |
 | Vite | - | Build tool |
 | Pest | - | Test framework |
 

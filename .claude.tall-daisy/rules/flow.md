@@ -4,7 +4,8 @@
 ## Project Flow
 
 <flow name="project">
-  <phase order="1">Overview definition → review</phase>
+  <phase order="0">Concept-making (strategy + concept) → review</phase>
+  <phase order="1">Definition (design + overview + config) → review</phase>
   <phase order="2">Feature design → review</phase>
   <phase order="3">DB design → review</phase>
   <phase order="4">Implementation (TDD) → review</phase>

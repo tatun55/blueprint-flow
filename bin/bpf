@@ -101,11 +101,11 @@ seed_rules() {
 
 seed_knowledge_sets() {
     local mappings=(
-        "page=stack,architecture,ui,data,auth,style"
-        "partial=stack,architecture,ui,data,style"
+        "page=stack,architecture,ui,data,auth,style,design-axes"
+        "partial=stack,architecture,ui,data,style,design-axes"
         "action=stack,data,auth,style"
         "table=stack,db,data,style"
-        "layout=stack,architecture,ui,style"
+        "layout=stack,architecture,ui,style,design-axes"
         "test=stack,testing,style"
     )
 

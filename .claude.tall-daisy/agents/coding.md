@@ -17,7 +17,8 @@ All knowledge is self-served from DB — you receive only an `act_id`.
   <step order="2">Read blueprint record to get type and specification (50% detail)</step>
   <step order="3">Query knowledge_sets for required rules based on blueprint type</step>
   <step order="4">Read core overview and config for app context</step>
-  <step order="5">Read dependency blueprints for related context</step>
+  <step order="5">For page/partial/layout: read core/design for design guidelines</step>
+  <step order="6">Read dependency blueprints for related context</step>
 </flow>
 
 ### Detail Levels
@@ -46,6 +47,9 @@ sqlite3 -json $DB "SELECT b.type, b.slug, b.content FROM blueprints b
 
 # 4. Get overview and config
 sqlite3 -json $DB "SELECT slug, content FROM cores WHERE type IN ('overview', 'config')"
+
+# 5. For page/partial/layout: get design guidelines
+sqlite3 -json $DB "SELECT content FROM cores WHERE slug = 'design'"
 ```
 
 ## Implementation Flow

@@ -137,16 +137,20 @@ CREATE VIEW IF NOT EXISTS app_snapshot AS
 SELECT 0 as sort, 'concept' as layer, type, slug, name, summary
 FROM cores WHERE type = 'concept'
 UNION ALL
+-- design: デザイン指針
+SELECT 1 as sort, 'design' as layer, type, slug, name, summary
+FROM cores WHERE type = 'design'
+UNION ALL
 -- core 層: アプリ概要・ビジネスルール・技術情報
-SELECT 1 as sort, 'core' as layer, type, slug, name, summary
-FROM cores WHERE type != 'concept'
+SELECT 2 as sort, 'core' as layer, type, slug, name, summary
+FROM cores WHERE type NOT IN ('concept', 'design')
 UNION ALL
 -- blueprint 層: 機能一覧（テスト除く）
-SELECT 2 as sort, type as layer, type, slug, name, summary
+SELECT 3 as sort, type as layer, type, slug, name, summary
 FROM blueprints WHERE type != 'test'
 UNION ALL
 -- blueprint 層: テスト定義
-SELECT 3 as sort, 'test' as layer, type,
+SELECT 4 as sort, 'test' as layer, type,
     slug, name, summary
 FROM blueprints WHERE type = 'test'
 ORDER BY sort, layer, slug;

@@ -1,10 +1,14 @@
 # UI Rules
-> daisyUI, Alpine.js, xylph-ui, modals, notifications, error display
+> Tailwind CSS, daisyUI semantic colors, Alpine.js, xylph-ui, modals, notifications, error display
 
 ## CSS
 
-- **daisyUI component classes first**
-- Use Tailwind utilities for fine-tuning only
+- **Tailwind CSS ユーティリティでスタイリング**
+- daisyUI は**セマンティックカラークラスとテーマ機能のみ**使用
+  - OK: `text-primary`, `bg-base-100`, `border-accent`, テーマ切替（`data-theme`）
+  - NG: `btn`, `card`, `modal`, `badge`, `alert` 等のコンポーネントクラス
+- daisyUI コンポーネントクラスは使用禁止 — Tailwind CSS のユーティリティで同等の UI を構築する
+- 理由: Tailwind 直書きの方がバリエーション・表現力・デザインの自由度が圧倒的に高い
 - No custom CSS
 
 ## Components

@@ -97,8 +97,8 @@ def cmd_set_concept(args):
         sys.exit(1)
     target, problem, solution, value, catchphrase = args[0], args[1], args[2], args[3], args[4]
 
-    if len(catchphrase) > 20:
-        print(f"Error: catchphrase must be ≤20 chars (got {len(catchphrase)})")
+    if len(catchphrase) > 40:
+        print(f"Error: catchphrase must be ≤40 chars (got {len(catchphrase)})")
         sys.exit(1)
 
     content = (
@@ -119,6 +119,69 @@ def cmd_set_concept(args):
     )
     conn.commit()
     out({"ok": True, "action": "set-concept", "catchphrase": catchphrase})
+
+
+def cmd_set_strategy(args):
+    """Set project strategy analysis. Detailed analysis from stdin.
+    Usage: ... | hub.py set-strategy <market_type> <strategic_axis> <moat>
+    market_type: 市場構造タイプ（例: "WTA弱・ニッチ特化型"）
+    strategic_axis: 選択した戦略軸（例: "領域特化 + 顧客接点特化"）
+    moat: 堀の構造（例: "業界固有データ×規制対応"）
+    Detailed strategy analysis via stdin (Markdown).
+    """
+    if len(args) < 3:
+        print("Usage: ... | hub.py set-strategy <market_type> <strategic_axis> <moat>")
+        sys.exit(1)
+    market_type, strategic_axis, moat = args[0], args[1], args[2]
+    analysis = sys.stdin.read() if not sys.stdin.isatty() else ""
+    if not analysis:
+        print("Error: strategy analysis required via stdin")
+        sys.exit(1)
+
+    content = (
+        f"## 市場構造\n{market_type}\n\n"
+        f"## 戦略軸\n{strategic_axis}\n\n"
+        f"## 堀の構造\n{moat}\n\n"
+        f"## 詳細分析\n{analysis}"
+    )
+
+    conn = get_conn()
+    conn.execute(
+        """INSERT INTO cores (type, slug, name, summary, content)
+           VALUES ('strategy', 'strategy', '戦略分析', ?, ?)
+           ON CONFLICT(slug) DO UPDATE SET
+             summary=excluded.summary, content=excluded.content""",
+        (strategic_axis, content)
+    )
+    conn.commit()
+    out({"ok": True, "action": "set-strategy", "strategic_axis": strategic_axis})
+
+
+def cmd_set_design(args):
+    """Set project design direction. Full design spec from stdin.
+    Usage: ... | hub.py set-design <style_name>
+    style_name: スタイル名（例: "Minimalism", "Neubrutalism"）
+    stdin: 完全なデザイン仕様（Markdown — スタイル/CSS/エフェクト/フォント/カラー/軸プロファイル）
+    """
+    if len(args) < 1:
+        print("Usage: ... | hub.py set-design <style_name>")
+        sys.exit(1)
+    style_name = args[0]
+    content = sys.stdin.read() if not sys.stdin.isatty() else ""
+    if not content:
+        print("Error: design specification required via stdin")
+        sys.exit(1)
+
+    conn = get_conn()
+    conn.execute(
+        """INSERT INTO cores (type, slug, name, summary, content)
+           VALUES ('design', 'design', 'デザイン指針', ?, ?)
+           ON CONFLICT(slug) DO UPDATE SET
+             summary=excluded.summary, content=excluded.content""",
+        (style_name, content)
+    )
+    conn.commit()
+    out({"ok": True, "action": "set-design", "style": style_name})
 
 
 # =========================================
@@ -582,7 +645,9 @@ def cmd_view(args):
 # =========================================
 
 COMMANDS = {
+    "set-strategy": cmd_set_strategy,
     "set-concept": cmd_set_concept,
+    "set-design": cmd_set_design,
     "upsert-core": cmd_upsert_core,
     "upsert-blueprint": cmd_upsert_blueprint,
     "add-dep": cmd_add_dep,

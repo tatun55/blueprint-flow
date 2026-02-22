@@ -168,6 +168,9 @@ CREATE TABLE dependencies (
 
 | type | Content | Example |
 |------|---------|---------|
+| `strategy` | Market analysis, strategic positioning, moat | WTA evaluation, Do/Don't check |
+| `concept` | Target, problem, solution, unique value, catchphrase | Project concept derived from strategy |
+| `design` | Visual tone, color, typography, layout | Design direction from axis shuffle |
 | `overview` | App summary, feature list | App name, purpose, main features |
 | `config` | Business rules, constants, domain knowledge | Status values, permission definitions |
 | `tech` | Tech stack, coding rules, flow definitions | Seeded from `rules/*.md` files |
@@ -466,7 +469,13 @@ Task tool:
 User: "I want to build a task management app"
 
 Hub:
-  1. AskUserQuestion to clarify requirements
+  0. Concept-Making — strategy framework
+     a. AskUserQuestion: ビジネスアイデアのヒアリング
+     b. 競争構造分析 (WTA, 4つの力, 隙間の特定)
+     c. 戦略軸選択 (5つのDo戦略から最適軸)
+     d. アンチパターンチェック (5つのDon't検証)
+     e. set-strategy → set-concept
+  1. Define design direction → set-design
   2. Create core/overview → user review
   3. Create core/config (business rules) → user review
   4. Verify core/tech rules are seeded
