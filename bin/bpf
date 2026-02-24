@@ -321,11 +321,30 @@ cmd_update() {
 }
 
 cmd_create_project() {
-    local project_name="${1:-}"
-    local stack="${2:-tall-daisy}"
+    # Parse flags
+    local project_name=""
+    local stack=""
+    local project_type="laravel"  # laravel | extension
+
+    for arg in "$@"; do
+        case "$arg" in
+            --extension) project_type="extension" ;;
+            --stack=*)   stack="${arg#--stack=}" ;;
+            -*)          log_error "Unknown option: $arg"; exit 1 ;;
+            *)           project_name="$arg" ;;
+        esac
+    done
+
+    # Default stack per type
+    if [[ -z "$stack" ]]; then
+        case "$project_type" in
+            extension) stack="chrome-extension" ;;
+            *)         stack="tall-daisy" ;;
+        esac
+    fi
 
     if [[ -z "$project_name" ]]; then
-        echo "Usage: bpf create-project <project-name> [stack]"
+        echo "Usage: bpf create-project <project-name> [--extension] [--stack=<stack>]"
         exit 1
     fi
 
@@ -335,6 +354,17 @@ cmd_create_project() {
         log_error "Project already exists: $project_path"
         exit 1
     fi
+
+    case "$project_type" in
+        extension) _create_extension_project "$project_name" "$project_path" "$stack" ;;
+        *)         _create_laravel_project   "$project_name" "$project_path" "$stack" ;;
+    esac
+}
+
+_create_laravel_project() {
+    local project_name="$1"
+    local project_path="$2"
+    local stack="$3"
 
     log_info "Creating project: $project_name"
     log_info "Path: $project_path"
@@ -443,15 +473,7 @@ EOF
 
     # Step 7: Add blueprint-flow
     log_info "Step 7: Adding blueprint-flow..."
-
-    if [[ ! -d "$BPF_HOME" ]]; then
-        log_info "Cloning blueprint-flow to $BPF_HOME..."
-        git clone https://github.com/tatun55/blueprint-flow "$BPF_HOME" --quiet
-    else
-        log_info "Using existing blueprint-flow at $BPF_HOME"
-        (cd "$BPF_HOME" && git pull origin main --quiet 2>/dev/null || true)
-    fi
-
+    _ensure_bpf_home
     cmd_init "$stack"
 
     # Commit blueprint-flow setup
@@ -478,6 +500,340 @@ EOF
     echo ""
 }
 
+_create_extension_project() {
+    local project_name="$1"
+    local project_path="$2"
+    local stack="$3"
+
+    log_info "Creating Chrome Extension project: $project_name"
+    log_info "Path: $project_path"
+    log_info "Stack: $stack"
+    echo ""
+
+    # Step 1: Scaffold with Vite react-ts template
+    log_info "Step 1: Scaffolding Vite + React + TypeScript..."
+    mkdir -p "$project_path"
+    cd "$project_path"
+    npm create vite@latest . -- --template react-ts --yes 2>/dev/null || \
+        npm create vite . -- --template react-ts
+    log_success "Vite project scaffolded"
+
+    # Step 2: Install dependencies
+    log_info "Step 2: Installing dependencies..."
+    npm install --silent
+    npm install -D \
+        tailwindcss@3 postcss autoprefixer \
+        daisyui@4 \
+        @crxjs/vite-plugin \
+        vitest \
+        @testing-library/react \
+        @testing-library/user-event \
+        @testing-library/jest-dom \
+        jsdom \
+        --silent
+    log_success "Dependencies installed"
+
+    # Tailwind init
+    npx tailwindcss init -p --quiet 2>/dev/null || true
+    log_success "Tailwind initialized"
+
+    # Step 3: Configure Tailwind
+    log_info "Step 3: Configuring Tailwind CSS..."
+
+    cat > tailwind.config.js << 'EOF'
+import daisyui from 'daisyui'
+
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: [
+    './src/**/*.{ts,tsx,html}',
+  ],
+  plugins: [daisyui],
+  daisyui: {
+    themes: ['light', 'dark'],
+  },
+}
+EOF
+
+    # Add Tailwind directives to index.css
+    cat > src/index.css << 'EOF'
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+EOF
+    log_success "Tailwind configured"
+
+    # Step 4: Create manifest config
+    log_info "Step 4: Creating manifest..."
+
+    cat > manifest.config.ts << EOF
+import { defineManifest } from '@crxjs/vite-plugin'
+
+export default defineManifest({
+  manifest_version: 3,
+  name: '$project_name',
+  version: '0.0.1',
+  description: '',
+  action: {
+    default_popup: 'src/popup/index.html',
+    default_icon: {
+      '16': 'icons/icon16.png',
+      '48': 'icons/icon48.png',
+      '128': 'icons/icon128.png',
+    },
+  },
+  background: {
+    service_worker: 'src/background/index.ts',
+    type: 'module',
+  },
+  content_scripts: [
+    {
+      matches: ['<all_urls>'],
+      js: ['src/content/index.ts'],
+    },
+  ],
+  permissions: ['storage', 'activeTab'],
+  icons: {
+    '16': 'icons/icon16.png',
+    '48': 'icons/icon48.png',
+    '128': 'icons/icon128.png',
+  },
+})
+EOF
+
+    # Step 5: Configure Vite with CRXJS
+    log_info "Step 5: Configuring Vite..."
+
+    cat > vite.config.ts << 'EOF'
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import { crx } from '@crxjs/vite-plugin'
+import manifest from './manifest.config'
+
+export default defineConfig({
+  plugins: [
+    react(),
+    crx({ manifest }),
+  ],
+})
+EOF
+    log_success "Vite configured with CRXJS"
+
+    # Step 6: Create src structure
+    log_info "Step 6: Creating src structure..."
+
+    mkdir -p src/popup src/options src/background src/content src/storage src/hooks src/lib
+    mkdir -p public/icons tests/unit tests/component tests/helpers
+
+    # Popup entry
+    cat > src/popup/index.html << EOF
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>$project_name</title>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="./main.tsx"></script>
+</body>
+</html>
+EOF
+
+    cat > src/popup/main.tsx << 'EOF'
+import React from 'react'
+import { createRoot } from 'react-dom/client'
+import '../index.css'
+import { PopupApp } from './PopupApp'
+
+createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <PopupApp />
+  </React.StrictMode>
+)
+EOF
+
+    cat > src/popup/PopupApp.tsx << EOF
+export function PopupApp() {
+  return (
+    <div className="w-[360px] min-h-[300px] p-4 bg-base-100 text-base-content">
+      <h1 className="text-lg font-semibold">$project_name</h1>
+    </div>
+  )
+}
+EOF
+
+    # Background service worker
+    cat > src/background/index.ts << 'EOF'
+chrome.runtime.onInstalled.addListener(() => {
+  console.log('Extension installed')
+})
+
+chrome.runtime.onMessage.addListener((_msg, _sender, _sendResponse) => {
+  // Handle messages from popup / content scripts
+})
+EOF
+
+    # Content script
+    cat > src/content/index.ts << 'EOF'
+// Content script — injected into web pages
+console.log('Content script loaded')
+EOF
+
+    # Storage helpers
+    cat > src/storage/index.ts << 'EOF'
+// Define storage schema here
+export interface StorageSchema {
+  settings: {
+    theme: 'light' | 'dark'
+  }
+}
+
+export async function getStorage<K extends keyof StorageSchema>(
+  key: K
+): Promise<StorageSchema[K] | undefined> {
+  const result = await chrome.storage.local.get(key)
+  return result[key] as StorageSchema[K] | undefined
+}
+
+export async function setStorage<K extends keyof StorageSchema>(
+  key: K,
+  value: StorageSchema[K]
+): Promise<void> {
+  await chrome.storage.local.set({ [key]: value })
+}
+EOF
+
+    # Message types
+    cat > src/lib/messages.ts << 'EOF'
+export type ExtensionMessage =
+  | { type: 'PING' }
+
+export type ExtensionResponse =
+  | { type: 'PONG' }
+EOF
+
+    # Test setup
+    cat > tests/setup.ts << 'EOF'
+import '@testing-library/jest-dom'
+
+globalThis.chrome = {
+  storage: {
+    local: {
+      get: vi.fn().mockResolvedValue({}),
+      set: vi.fn().mockResolvedValue(undefined),
+      onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
+    },
+    sync: {
+      get: vi.fn().mockResolvedValue({}),
+      set: vi.fn().mockResolvedValue(undefined),
+      onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
+    },
+  },
+  runtime: {
+    sendMessage: vi.fn(),
+    onMessage: { addListener: vi.fn() },
+    onInstalled: { addListener: vi.fn() },
+  },
+  tabs: {
+    query: vi.fn().mockResolvedValue([]),
+  },
+} as unknown as typeof chrome
+EOF
+
+    # Add vitest config to vite.config.ts
+    cat > vite.config.ts << 'EOF'
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import { crx } from '@crxjs/vite-plugin'
+import manifest from './manifest.config'
+
+export default defineConfig({
+  plugins: [
+    react(),
+    crx({ manifest }),
+  ],
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: ['./tests/setup.ts'],
+  },
+})
+EOF
+
+    # Placeholder icons
+    mkdir -p public/icons
+    for size in 16 48 128; do
+        touch "public/icons/icon${size}.png"
+    done
+
+    # .gitignore
+    cat > .gitignore << 'EOF'
+node_modules/
+dist/
+dist-zip/
+.blueprint-flow
+*.local
+EOF
+
+    log_success "src structure created"
+
+    # Step 7: Initialize Git
+    log_info "Step 7: Initializing Git..."
+    git init --quiet
+    git add -A
+    git commit -m "Initial commit: Chrome Extension MV3 + React + TypeScript + Vite + Tailwind CSS 3" --quiet
+    log_success "Git initialized"
+
+    # Step 8: Create GitHub repo
+    log_info "Step 8: Creating GitHub repository..."
+    if command -v gh &> /dev/null; then
+        gh repo create "$project_name" --private --source=. --push
+        log_success "GitHub private repo created and pushed"
+    else
+        log_warn "gh CLI not found. Skipping GitHub repo creation."
+    fi
+
+    # Step 9: Add blueprint-flow
+    log_info "Step 9: Adding blueprint-flow..."
+    _ensure_bpf_home
+    cmd_init "$stack"
+
+    # Commit blueprint-flow setup
+    git add -A
+    git commit -m "Add blueprint-flow with $stack stack" --quiet
+    git push --quiet 2>/dev/null || true
+    log_success "Blueprint setup committed"
+
+    # Complete
+    echo ""
+    echo -e "${GREEN}========================================${NC}"
+    echo -e "${GREEN}  Chrome Extension project created!${NC}"
+    echo -e "${GREEN}========================================${NC}"
+    echo ""
+    echo -e "  Project: ${BLUE}$project_name${NC}"
+    echo -e "  Path:    ${BLUE}$project_path${NC}"
+    echo -e "  Stack:   ${BLUE}$stack${NC}"
+    echo ""
+    echo -e "  ${YELLOW}Next steps:${NC}"
+    echo -e "  1. cd $project_path"
+    echo -e "  2. npm run dev        (HMR with CRXJS)"
+    echo -e "  3. Load dist/ in chrome://extensions (Developer mode)"
+    echo -e "  4. /bpf"
+    echo ""
+}
+
+_ensure_bpf_home() {
+    if [[ ! -d "$BPF_HOME" ]]; then
+        log_info "Cloning blueprint-flow to $BPF_HOME..."
+        git clone https://github.com/tatun55/blueprint-flow "$BPF_HOME" --quiet
+    else
+        log_info "Using existing blueprint-flow at $BPF_HOME"
+        (cd "$BPF_HOME" && git pull origin main --quiet 2>/dev/null || true)
+    fi
+}
+
 cmd_pull() {
     log_info "Pulling latest blueprint-flow..."
     cd "$BPF_HOME" && git pull origin main
@@ -498,7 +854,11 @@ Blueprint Flow v2 CLI
 Usage: bpf <command> [args]
 
 Commands:
-  create-project <name> [stack]  Create new Laravel project with full setup
+  create-project <name>          Create new Laravel project (tall-daisy stack)
+  create-project <name> --extension
+                                 Create new Chrome Extension project (chrome-extension stack)
+  create-project <name> --stack=<stack>
+                                 Create project with specified stack
   init [stack]                   Initialize blueprint-flow in current project
   update                         Update blueprint-flow symlinks and schema
   pull                           Pull latest blueprint-flow from remote
@@ -518,7 +878,10 @@ Configuration (~/.bpfrc):
 
 Examples:
   bpf create-project my-todo-app
+  bpf create-project my-extension --extension
+  bpf create-project my-ext --extension --stack=chrome-extension
   bpf init tall-daisy
+  bpf init chrome-extension
   bpf update
   bpf db reset
 EOF
@@ -528,7 +891,7 @@ EOF
 # Main dispatch
 # ============================================
 case "${1:-}" in
-    create-project) cmd_create_project "${2:-}" "${3:-tall-daisy}" ;;
+    create-project) cmd_create_project "${@:2}" ;;
     init)           cmd_init "${2:-tall-daisy}" ;;
     update)         cmd_update ;;
     pull)           cmd_pull ;;
