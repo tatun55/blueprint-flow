@@ -99,58 +99,181 @@ seed_rules() {
     echo "Seeded $count rule(s) from: $rules_dir"
 }
 
-seed_knowledge_sets() {
-    local mappings=(
-        "page=stack,architecture,ui,data,auth,style,design-axes"
-        "partial=stack,architecture,ui,data,style,design-axes"
-        "action=stack,data,auth,style"
-        "table=stack,db,data,style"
-        "layout=stack,architecture,ui,style,design-axes"
-        "test=stack,testing,style"
-    )
-
-    local count=0
-    for mapping in "${mappings[@]}"; do
-        local bp_type="${mapping%%=*}"
-        local slugs="${mapping#*=}"
-        IFS=',' read -ra slug_arr <<< "$slugs"
-        for slug in "${slug_arr[@]}"; do
-            sqlite3 "$DB_PATH" "INSERT OR IGNORE INTO knowledge_sets (blueprint_type, rule_slug)
-                VALUES ('$bp_type', '$slug');"
-            count=$((count + 1))
-        done
-    done
-    echo "Seeded $count knowledge set mapping(s)"
-}
+# v3 では knowledge_sets テーブルは撤去。type→rules マッピングは hub.py 内の Python dict (TYPE_RULES) に集約済み。
 
 db_migrate() {
     # Run schema migrations for existing databases
     # Each migration checks before applying (idempotent)
+    # NOTE: V2→V3 の破壊的移行は db_migrate_v3() を使う
 
     # Always use latest schema from BPF_HOME
     cp "$BPF_HOME/blueprint/schema.sql" "$SCHEMA_PATH"
 
-    # Migration 1: Add dep_gate column to dependencies
-    local has_dep_gate
-    has_dep_gate=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM pragma_table_info('dependencies') WHERE name='dep_gate';")
-    if [[ "$has_dep_gate" == "0" ]]; then
-        sqlite3 "$DB_PATH" "ALTER TABLE dependencies ADD COLUMN dep_gate TEXT NOT NULL DEFAULT 'done';"
-        log_success "Migration: added dep_gate to dependencies"
-    fi
-
-    # Recreate VIEWs (always, to pick up any schema changes)
+    # v3 では all view を毎回作り直し（schema.sql の IF NOT EXISTS で冪等）
     sqlite3 "$DB_PATH" << 'MIGRATE_EOF'
+DROP VIEW IF EXISTS active_blueprints;
 DROP VIEW IF EXISTS app_snapshot;
 DROP VIEW IF EXISTS project_progress;
 DROP VIEW IF EXISTS item_status;
 DROP VIEW IF EXISTS next_actions;
 DROP VIEW IF EXISTS attention_needed;
-DROP VIEW IF EXISTS test_coverage;
 DROP VIEW IF EXISTS dependency_map;
 DROP VIEW IF EXISTS task_board;
+DROP VIEW IF EXISTS test_coverage;
 MIGRATE_EOF
     sqlite3 "$DB_PATH" < "$SCHEMA_PATH"
     log_success "VIEWs recreated"
+}
+
+db_migrate_v3() {
+    # V2 → V3 破壊的マイグレーション
+    # - cores: stage / stage_dirty カラム追加
+    # - blueprints: テーブル再作成 (CHECK + UNIQUE を v3 に、step→step_status 縮約)
+    # - dependencies.dep_gate: test_l*→test / seed→define
+    # - stage_transitions / review_decisions テーブル新設
+    # - knowledge_sets テーブル drop (Wave 1c 前倒し)
+    # - v2 の test_level / step / parent_id カラム drop (Wave 1c 前倒し)
+    if [[ ! -f "$DB_PATH" ]]; then
+        log_error "No DB at $DB_PATH — run 'bpf db init' for a fresh v3 schema"
+        return 1
+    fi
+
+    # v3 detection: cores.stage column の有無で判定
+    local has_stage
+    has_stage=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM pragma_table_info('cores') WHERE name='stage';")
+    if [[ "$has_stage" != "0" ]]; then
+        log_info "DB is already v3 (cores.stage exists) — skipping"
+        return 0
+    fi
+
+    # Backup
+    local backup="${DB_PATH}.v2-backup-$(date +%Y%m%d-%H%M%S)"
+    cp "$DB_PATH" "$backup"
+    log_success "Backup: $backup"
+
+    # 最新 schema を取得しておく
+    cp "$BPF_HOME/blueprint/schema.sql" "$SCHEMA_PATH"
+
+    # Phase 1: テーブル変換（views/indexes は後で schema.sql から再作成）
+    # .bail on でエラー時に即停止 → BEGIN 中の未 COMMIT 変更は破棄される
+    sqlite3 "$DB_PATH" << 'MIGRATE_V3_EOF'
+.bail on
+BEGIN TRANSACTION;
+
+-- 1. cores: stage / stage_dirty 追加
+ALTER TABLE cores ADD COLUMN stage TEXT NOT NULL DEFAULT 'proto'
+    CHECK(stage IN ('proto','mvp','beta','prod','prod_reviewed'));
+ALTER TABLE cores ADD COLUMN stage_dirty INTEGER NOT NULL DEFAULT 0;
+
+-- 2. blueprints: CHECK + UNIQUE を v3 にするため再作成
+CREATE TABLE blueprints_v3 (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    type                TEXT NOT NULL,
+    slug                TEXT NOT NULL,
+    name                TEXT NOT NULL,
+    summary             TEXT NOT NULL,
+    content             TEXT NOT NULL,
+    step_status         TEXT NOT NULL DEFAULT 'define'
+                        CHECK(step_status IN ('define','impl','test','done')),
+    stage               TEXT NOT NULL DEFAULT 'proto'
+                        CHECK(stage IN ('proto','mvp','beta','prod')),
+    parent_blueprint_id INTEGER REFERENCES blueprints_v3(id),
+    frozen              INTEGER NOT NULL DEFAULT 0,
+    reviewed            BOOLEAN DEFAULT 0,
+    locked_by           TEXT,
+    dirty               BOOLEAN DEFAULT 0,
+    dirty_reason        TEXT,
+    updated_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(type, stage, slug, frozen)
+);
+
+-- 値変換コピー: step → step_status (test_l*→test, seed→define)
+-- v2 には reviewed カラムがない → v3 の DEFAULT 0 に任せる
+INSERT INTO blueprints_v3
+    (id, type, slug, name, summary, content,
+     step_status, stage, parent_blueprint_id, frozen,
+     locked_by, dirty, dirty_reason, updated_at)
+SELECT
+    id, type, slug, name, summary, content,
+    CASE step
+        WHEN 'define'  THEN 'define'
+        WHEN 'seed'    THEN 'define'
+        WHEN 'impl'    THEN 'impl'
+        WHEN 'test_l1' THEN 'test'
+        WHEN 'test_l2' THEN 'test'
+        WHEN 'test_l3' THEN 'test'
+        WHEN 'done'    THEN 'done'
+        ELSE 'define'
+    END,
+    'proto', NULL, 0,
+    locked_by, dirty, dirty_reason, updated_at
+FROM blueprints;
+
+-- 旧 blueprints を drop して RENAME（FK は views 経由で参照されているだけなのでこの順で OK）
+-- dependencies は source_id/target_id で blueprints を参照しているが、ID は保持されるので問題なし
+DROP TABLE blueprints;
+ALTER TABLE blueprints_v3 RENAME TO blueprints;
+
+-- 3. dependencies.dep_gate: 旧値を v3 値に縮約
+UPDATE dependencies SET dep_gate = 'test'   WHERE dep_gate IN ('test_l1','test_l2','test_l3');
+UPDATE dependencies SET dep_gate = 'define' WHERE dep_gate = 'seed';
+
+-- 4. v3 新設テーブル
+CREATE TABLE stage_transitions (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    core_id     INTEGER NOT NULL REFERENCES cores(id),
+    from_stage  TEXT NOT NULL,
+    to_stage    TEXT NOT NULL,
+    reviewed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    notes       TEXT
+);
+
+CREATE TABLE review_decisions (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    act_id        INTEGER,
+    blueprint_id  INTEGER,
+    runner        TEXT NOT NULL,
+    decision_type TEXT NOT NULL,
+    trigger       TEXT NOT NULL,
+    mode          TEXT,
+    score         INTEGER NOT NULL,
+    threshold     INTEGER NOT NULL,
+    asked_human   INTEGER NOT NULL,
+    outcome       TEXT NOT NULL,
+    reason        TEXT NOT NULL,
+    raw_emit      TEXT,
+    created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 5. Wave 1c 前倒し: knowledge_sets drop（v3 では Python dict で代替）
+DROP TABLE IF EXISTS knowledge_sets;
+
+-- 6. v2 view を全部 drop（schema.sql で v3 view を CREATE する）
+DROP VIEW IF EXISTS app_snapshot;
+DROP VIEW IF EXISTS project_progress;
+DROP VIEW IF EXISTS item_status;
+DROP VIEW IF EXISTS next_actions;
+DROP VIEW IF EXISTS attention_needed;
+DROP VIEW IF EXISTS dependency_map;
+DROP VIEW IF EXISTS task_board;
+DROP VIEW IF EXISTS test_coverage;
+DROP VIEW IF EXISTS active_blueprints;
+
+COMMIT;
+MIGRATE_V3_EOF
+
+    if [[ $? -ne 0 ]]; then
+        log_error "Migration failed. Restore with: cp $backup $DB_PATH"
+        return 1
+    fi
+
+    # Phase 2: schema.sql 流し込みで v3 views / indexes / triggers を作成
+    # CREATE INDEX / CREATE VIEW / CREATE TRIGGER は IF NOT EXISTS、CREATE TABLE は既存スキップ
+    sqlite3 "$DB_PATH" < "$SCHEMA_PATH"
+
+    log_success "Migrated to V3 schema"
+    echo "  Backup: $backup"
+    echo "  Restore: cp $backup $DB_PATH"
 }
 
 db_init() {
@@ -163,7 +286,6 @@ db_init() {
         echo "Database initialized: $DB_PATH"
     fi
     seed_rules
-    seed_knowledge_sets
 }
 
 db_reset() {
@@ -171,7 +293,6 @@ db_reset() {
     sqlite3 "$DB_PATH" < "$SCHEMA_PATH"
     echo "Database reset: $DB_PATH"
     seed_rules
-    seed_knowledge_sets
 }
 
 # ============================================
@@ -866,6 +987,7 @@ Commands:
   db reset                       Reset database + seed rules (WARNING: deletes all data)
   db seed                        Seed rules only (re-import from .md files)
   db path                        Show database path
+  db migrate-v3                  Migrate v2 schema → v3 (stage model + rubric, with backup)
   ui [port]                      Launch web dashboard (default: 3141)
   home                           Show resolved BPF_HOME path
 
@@ -898,11 +1020,12 @@ case "${1:-}" in
     home)           cmd_home ;;
     db)
         case "${2:-}" in
-            init)  db_init ;;
-            reset) db_reset ;;
-            seed)  seed_rules; seed_knowledge_sets ;;
-            path)  echo "$DB_PATH" ;;
-            *)     echo "Usage: bpf db <init|reset|seed|path>"; exit 1 ;;
+            init)        db_init ;;
+            reset)       db_reset ;;
+            seed)        seed_rules ;;
+            path)        echo "$DB_PATH" ;;
+            migrate-v3)  db_migrate_v3 ;;
+            *)           echo "Usage: bpf db <init|reset|seed|path|migrate-v3>"; exit 1 ;;
         esac
         ;;
     ui)
