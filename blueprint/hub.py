@@ -25,6 +25,12 @@ DB_PATH = "blueprint/blueprint.db"
 # V3: step_status の進行順序 (4 段)
 STATUS_FLOW = ["define", "impl", "test", "done"]
 
+# V3: stage の進行順序 (UX 完成度軸)。prod_reviewed は bpf 終端
+STAGE_FLOW = ["proto", "mvp", "beta", "prod", "prod_reviewed"]
+
+# V3: stage → UX 完成度 % (推計用)
+STAGE_UX_PCT = {"proto": 25, "mvp": 50, "beta": 75, "prod": 100, "prod_reviewed": 100}
+
 
 def get_conn():
     conn = sqlite3.connect(DB_PATH)
@@ -611,6 +617,213 @@ def cmd_status(args):
     out([dict(r) for r in rows])
 
 
+# =========================================
+# Stage operations (V3)
+# =========================================
+
+def _get_overview(conn):
+    """現 overview core を取得 (1 件想定)."""
+    return conn.execute(
+        "SELECT id, stage, stage_dirty FROM cores WHERE type='overview' LIMIT 1"
+    ).fetchone()
+
+
+def _next_stage(current):
+    """次 stage を返す。終端なら None."""
+    try:
+        idx = STAGE_FLOW.index(current)
+        if idx + 1 < len(STAGE_FLOW):
+            return STAGE_FLOW[idx + 1]
+    except ValueError:
+        pass
+    return None
+
+
+def _stage_progress(conn, stage):
+    """指定 stage の active blueprint (test 除く) の (done, total) を返す."""
+    row = conn.execute(
+        "SELECT SUM(step_status='done') AS done, COUNT(*) AS total "
+        "FROM blueprints WHERE stage=? AND frozen=0 AND type!='test'",
+        (stage,)
+    ).fetchone()
+    done = row["done"] or 0
+    total = row["total"] or 0
+    return done, total
+
+
+def cmd_stage(args):
+    """Stage コマンド群 (V3).
+    Usage:
+      hub.py stage                  現 stage と UX% を表示
+      hub.py stage status           各 step_status の集計 + done/total + UX 進捗
+      hub.py stage review           現 stage の全 active blueprint 一覧 (人間レビュー用)
+      hub.py stage advance          次 stage へクローン進化
+    """
+    sub = args[0] if args else None
+    conn = get_conn()
+    ov = _get_overview(conn)
+    if not ov:
+        print("Error: no 'overview' core found. Run 'bpf init' first.")
+        sys.exit(1)
+
+    if sub is None:
+        # 現 stage 表示
+        done, total = _stage_progress(conn, ov["stage"])
+        out({
+            "ok": True, "action": "stage",
+            "stage": ov["stage"],
+            "ux_pct_target": STAGE_UX_PCT.get(ov["stage"]),
+            "blueprints_done": done, "blueprints_total": total,
+            "stage_dirty": bool(ov["stage_dirty"]),
+        })
+        return
+
+    if sub == "status":
+        # project_progress + done/total + UX 推計
+        rows = conn.execute(
+            "SELECT step_status, COUNT(*) AS total, SUM(step_status='done') AS done "
+            "FROM active_blueprints WHERE type!='test' GROUP BY step_status"
+        ).fetchall()
+        done, total = _stage_progress(conn, ov["stage"])
+        ux_est = (done / total * STAGE_UX_PCT.get(ov["stage"], 0)) if total else 0
+        out({
+            "ok": True, "action": "stage-status",
+            "stage": ov["stage"],
+            "ux_pct_target": STAGE_UX_PCT.get(ov["stage"]),
+            "ux_pct_estimated": round(ux_est, 1),
+            "blueprints_done": done, "blueprints_total": total,
+            "stage_dirty": bool(ov["stage_dirty"]),
+            "by_status": [dict(r) for r in rows],
+        })
+        return
+
+    if sub == "review":
+        # 現 stage の active blueprint 一覧 (人間レビュー用、対話 UI は別途)
+        rows = conn.execute(
+            "SELECT id, type, slug, name, summary, step_status, dirty, dirty_reason "
+            "FROM active_blueprints ORDER BY type, id"
+        ).fetchall()
+        done, total = _stage_progress(conn, ov["stage"])
+        out({
+            "ok": True, "action": "stage-review",
+            "stage": ov["stage"],
+            "blueprints_done": done, "blueprints_total": total,
+            "stage_dirty": bool(ov["stage_dirty"]),
+            "blueprints": [dict(r) for r in rows],
+            "hint": "approve all with `bpf stage advance` once reviewed",
+        })
+        return
+
+    if sub == "advance":
+        _stage_advance(conn, ov)
+        return
+
+    print(f"Error: unknown stage subcommand '{sub}'. "
+          f"Use: stage [status|review|advance]")
+    sys.exit(1)
+
+
+def _stage_advance(conn, ov):
+    """クローン進化: 現 stage を frozen=1、次 stage 用に全 active blueprint を
+    クローン (parent_blueprint_id で履歴 link)、dependencies も id マップで再構築、
+    cores.stage を更新、stage_transitions に記録."""
+    current = ov["stage"]
+    ns = _next_stage(current)
+    if ns is None:
+        out({"ok": False, "action": "stage-advance",
+             "error": f"already at terminal stage '{current}'"})
+        sys.exit(1)
+
+    # prod_reviewed (bpf 終端) はクローン不要、cores.stage 更新と記録のみ
+    if ns == "prod_reviewed":
+        with conn:
+            # 現 stage の active blueprint をすべて frozen に
+            conn.execute(
+                "UPDATE blueprints SET frozen=1 WHERE stage=? AND frozen=0",
+                (current,)
+            )
+            conn.execute(
+                "UPDATE cores SET stage=?, stage_dirty=0 WHERE id=?",
+                (ns, ov["id"])
+            )
+            conn.execute(
+                "INSERT INTO stage_transitions (core_id, from_stage, to_stage, notes) "
+                "VALUES (?, ?, ?, ?)",
+                (ov["id"], current, ns, "bpf scope end (no clone)")
+            )
+        out({"ok": True, "action": "stage-advance",
+             "from": current, "to": ns,
+             "cloned_blueprints": 0, "cloned_dependencies": 0,
+             "note": "bpf scope ended (prod_reviewed)"})
+        return
+
+    with conn:
+        # 1. 現 stage の active blueprint を全部取得 (test 含む)
+        active = conn.execute(
+            "SELECT id, type, slug, name, summary, content "
+            "FROM blueprints WHERE stage=? AND frozen=0",
+            (current,)
+        ).fetchall()
+
+        # 2. 旧 blueprint を frozen=1 に
+        conn.execute(
+            "UPDATE blueprints SET frozen=1 WHERE stage=? AND frozen=0",
+            (current,)
+        )
+
+        # 3. 次 stage 用にクローン (step_status='define'、parent_blueprint_id で履歴 link)
+        id_map = {}
+        for bp in active:
+            cur = conn.execute(
+                "INSERT INTO blueprints "
+                "(type, slug, name, summary, content, step_status, stage, "
+                " parent_blueprint_id, frozen) "
+                "VALUES (?, ?, ?, ?, ?, 'define', ?, ?, 0)",
+                (bp["type"], bp["slug"], bp["name"], bp["summary"], bp["content"],
+                 ns, bp["id"])
+            )
+            id_map[bp["id"]] = cur.lastrowid
+
+        # 4. dependencies を新 id ペアで再構築 (両端が新 stage に存在する場合のみ)
+        old_ids = tuple(id_map.keys())
+        cloned_deps = 0
+        if old_ids:
+            placeholder = ",".join("?" * len(old_ids))
+            deps = conn.execute(
+                f"SELECT source_id, target_id, dep_gate, detail FROM dependencies "
+                f"WHERE source_id IN ({placeholder}) AND target_id IN ({placeholder})",
+                old_ids + old_ids
+            ).fetchall()
+            for d in deps:
+                conn.execute(
+                    "INSERT OR IGNORE INTO dependencies "
+                    "(source_id, target_id, dep_gate, detail) VALUES (?, ?, ?, ?)",
+                    (id_map[d["source_id"]], id_map[d["target_id"]],
+                     d["dep_gate"], d["detail"])
+                )
+                cloned_deps += 1
+
+        # 5. cores.stage を更新、dirty クリア
+        conn.execute(
+            "UPDATE cores SET stage=?, stage_dirty=0 WHERE id=?",
+            (ns, ov["id"])
+        )
+
+        # 6. stage_transitions に記録
+        conn.execute(
+            "INSERT INTO stage_transitions (core_id, from_stage, to_stage, notes) "
+            "VALUES (?, ?, ?, ?)",
+            (ov["id"], current, ns,
+             f"cloned {len(active)} blueprints + {cloned_deps} deps")
+        )
+
+    out({"ok": True, "action": "stage-advance",
+         "from": current, "to": ns,
+         "ux_pct_target": STAGE_UX_PCT[ns],
+         "cloned_blueprints": len(active),
+         "cloned_dependencies": cloned_deps})
+
+
 def cmd_view(args):
     """Query a VIEW by name.
     Usage: hub.py view <view_name>
@@ -656,6 +869,7 @@ COMMANDS = {
     "view":             cmd_view,
     "commit":           cmd_commit,
     "push":             cmd_push,
+    "stage":            cmd_stage,
 }
 
 def main():
