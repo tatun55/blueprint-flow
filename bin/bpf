@@ -177,7 +177,8 @@ CREATE TABLE blueprints_v3 (
                         CHECK(step_status IN ('define','impl','test','done')),
     stage               TEXT NOT NULL DEFAULT 'proto'
                         CHECK(stage IN ('proto','mvp','beta','prod')),
-    parent_blueprint_id INTEGER REFERENCES blueprints_v3(id),
+    -- FK は省略 (SQLite の自己参照 FK + ALTER RENAME 不整合のため。schema.sql 注釈参照)
+    parent_blueprint_id INTEGER,
     frozen              INTEGER NOT NULL DEFAULT 0,
     reviewed            BOOLEAN DEFAULT 0,
     locked_by           TEXT,

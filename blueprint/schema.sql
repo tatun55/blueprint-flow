@@ -47,9 +47,11 @@ CREATE TABLE IF NOT EXISTS blueprints (
                         CHECK(step_status IN ('define','impl','test','done')),
 
     -- v3: stage + クローン履歴
+    -- parent_blueprint_id は前 stage の id (クローン履歴用)。SQLite の自己参照 FK +
+    -- ALTER TABLE RENAME の不整合を避けるため FK 制約は省略 (整合性はアプリ側で担保)。
     stage               TEXT NOT NULL DEFAULT 'proto'
                         CHECK(stage IN ('proto','mvp','beta','prod')),
-    parent_blueprint_id INTEGER REFERENCES blueprints(id),
+    parent_blueprint_id INTEGER,
     frozen              INTEGER NOT NULL DEFAULT 0,
 
     reviewed            BOOLEAN DEFAULT 0,
