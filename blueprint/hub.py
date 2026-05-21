@@ -18,7 +18,10 @@ Content input:
 import sqlite3
 import sys
 import json
+import os
 import subprocess
+import urllib.request
+import urllib.error
 
 DB_PATH = "blueprint/blueprint.db"
 
@@ -30,6 +33,19 @@ STAGE_FLOW = ["proto", "mvp", "beta", "prod", "prod_reviewed"]
 
 # V3: stage → UX 完成度 % (推計用)
 STAGE_UX_PCT = {"proto": 25, "mvp": 50, "beta": 75, "prod": 100, "prod_reviewed": 100}
+
+# V3 §9: Review Scoring Rubric — trigger は closed enum
+TRIGGER_ENUM = frozenset({
+    "F1", "F2", "F3a", "F3b", "F4a", "F4b",
+    "F5", "F6", "F7", "F8", "F9", "F10", "F11",
+    "default", "cleanup", "mechanical", "uncertain",
+})
+
+# V3 §9.7: runner 別 threshold
+RUNNER_THRESHOLDS = {"bpf": 75, "night-runner": 95}
+
+# review_decisions.decision_type の許容値
+DECISION_TYPES = frozenset({"pre_action", "post_complete", "stage_gate"})
 
 
 def get_conn():
@@ -53,6 +69,47 @@ def next_status(current):
 def out(data):
     """Output JSON result."""
     print(json.dumps(data, ensure_ascii=False, indent=2))
+
+
+def _parse_kv(args):
+    """--key=value 形式を kv dict に、その他は positional list に振り分ける."""
+    kv = {}
+    pos = []
+    for a in args:
+        if a.startswith("--") and "=" in a:
+            k, v = a[2:].split("=", 1)
+            kv[k] = v
+        else:
+            pos.append(a)
+    return kv, pos
+
+
+def _slack_post(text):
+    """Slack へテキスト POST (best-effort, 失敗しても caller に例外を投げない).
+
+    挙動:
+      - 環境変数 SLACK_DRY_RUN=1 → 送信せず stderr に出力
+      - 環境変数 SLACK_WEBHOOK_URL 未設定 → 送信せず stderr に skip ログ
+      - HTTP/network エラー → stderr に出力して False を返す
+    """
+    if os.environ.get("SLACK_DRY_RUN") == "1":
+        print(f"[slack-dry-run] {text}", file=sys.stderr)
+        return True
+    url = os.environ.get("SLACK_WEBHOOK_URL")
+    if not url:
+        print(f"[slack-skip] SLACK_WEBHOOK_URL not set: {text}", file=sys.stderr)
+        return False
+    payload = json.dumps({"text": text}).encode("utf-8")
+    req = urllib.request.Request(
+        url, data=payload,
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return resp.status == 200
+    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError) as e:
+        print(f"[slack-error] {e}: {text}", file=sys.stderr)
+        return False
 
 
 # =========================================
@@ -438,15 +495,23 @@ def cmd_clear_dirty(args):
 
 def cmd_complete(args):
     """Complete current step_status: advance one step, commit, unlock.
-    Usage: hub.py complete <id>
+    Usage: hub.py complete <id> [--runner=bpf|night-runner]
 
     V3: define → impl → test → done と1段進める。git commit も同時実施。
-    stage_dirty 検知フックは 1b-iv で追加予定。
+    ns='done' に達した時点で `_stage_progress` (test 除く) が全 done なら
+    cores.stage_dirty を 0→1 にセット、Slack 通知、F2 を review_decisions に記録。
+    --runner は stage_dirty 自動発火を記録する際の runner 列に入る (default: bpf)。
     """
-    if not args:
-        print("Usage: hub.py complete <id>")
+    kv, pos = _parse_kv(args)
+    if not pos:
+        print("Usage: hub.py complete <id> [--runner=bpf|night-runner]")
         sys.exit(1)
-    bp_id = int(args[0])
+    bp_id = int(pos[0])
+    runner = kv.get("runner", "bpf")
+    if runner not in RUNNER_THRESHOLDS:
+        print(f"Error: --runner must be one of {sorted(RUNNER_THRESHOLDS)} "
+              f"(got {runner!r})")
+        sys.exit(1)
 
     conn = get_conn()
     row = conn.execute(
@@ -474,6 +539,36 @@ def cmd_complete(args):
     conn.commit()
     steps_done.append(f"advance({current}→{ns})")
 
+    # stage_dirty 検知 (§5.4): ns='done' でかつ現 stage の active impl 全 done なら発火
+    stage_dirty_fired = False
+    ov = _get_overview(conn)
+    if ns == "done" and ov and not ov["stage_dirty"]:
+        done, total = _stage_progress(conn, ov["stage"])
+        if total > 0 and done == total:
+            conn.execute(
+                "UPDATE cores SET stage_dirty=1 WHERE id=?",
+                (ov["id"],)
+            )
+            # F2 Gate を自動記録 (score=100、threshold 無視で ask)
+            _record_review_decision(
+                conn,
+                act_id=None, blueprint_id=bp_id,
+                runner=runner, decision_type="stage_gate",
+                trigger="F2", mode="G",
+                score=100, threshold=RUNNER_THRESHOLDS[runner],
+                asked_human=1, outcome="blocked",
+                reason=f"stage_dirty auto-set: stage '{ov['stage']}' active impl 全 done",
+                raw_emit=None,
+            )
+            conn.commit()
+            stage_dirty_fired = True
+            ux_pct = STAGE_UX_PCT.get(ov["stage"], 0)
+            _slack_post(
+                f":dart: stage `{ov['stage']}` 完了 (UX {ux_pct}% 達成見込み) "
+                f"— `bpf stage review` で確認の上 `bpf stage advance`"
+            )
+            steps_done.append("stage_dirty=1")
+
     # git commit
     subprocess.run(["git", "add", "-A"], check=True, capture_output=True)
     diff_result = subprocess.run(["git", "diff", "--cached", "--quiet"])
@@ -485,9 +580,12 @@ def cmd_complete(args):
     else:
         steps_done.append("commit(skipped)")
 
-    out({"ok": True, "action": "complete", "id": bp_id,
-         "type": row["type"], "slug": row["slug"],
-         "stage": row["stage"], "step_status": ns, "steps": steps_done})
+    result = {"ok": True, "action": "complete", "id": bp_id,
+              "type": row["type"], "slug": row["slug"],
+              "stage": row["stage"], "step_status": ns, "steps": steps_done}
+    if stage_dirty_fired:
+        result["stage_dirty_fired"] = True
+    out(result)
 
 
 # =========================================
@@ -824,6 +922,182 @@ def _stage_advance(conn, ov):
          "cloned_dependencies": cloned_deps})
 
 
+# =========================================
+# Review operations (V3 §9 Review Scoring Rubric)
+# =========================================
+
+def _record_review_decision(conn, act_id, blueprint_id, runner, decision_type,
+                            trigger, mode, score, threshold, asked_human,
+                            outcome, reason, raw_emit):
+    """review_decisions に 1 行 INSERT (commit は caller 側)."""
+    conn.execute(
+        "INSERT INTO review_decisions "
+        "(act_id, blueprint_id, runner, decision_type, trigger, mode, "
+        " score, threshold, asked_human, outcome, reason, raw_emit) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (act_id, blueprint_id, runner, decision_type, trigger, mode,
+         score, threshold, asked_human, outcome, reason, raw_emit)
+    )
+
+
+def _decide_outcome(runner, score):
+    """§9.7 threshold gate → (outcome, should_record, asked_human).
+
+    bpf: score>=75 → blocked (ask), 30<=score<75 → approved (silent), <30 → 記録省略
+    night-runner: >=95 → blocked (alert), 75<=score<95 → queued (dirty queue),
+                  30<=score<75 → approved, <30 → 記録省略
+    """
+    threshold = RUNNER_THRESHOLDS[runner]
+    if runner == "bpf":
+        if score >= threshold:
+            return "blocked", True, 1
+        if score >= 30:
+            return "approved", True, 0
+        return "approved", False, 0
+    if runner == "night-runner":
+        if score >= threshold:
+            return "blocked", True, 1
+        if score >= 75:
+            return "queued", True, 0
+        if score >= 30:
+            return "approved", True, 0
+        return "approved", False, 0
+    raise ValueError(f"unknown runner: {runner}")
+
+
+def cmd_review(args):
+    """Review コマンド群 (Review Scoring Rubric §9).
+    Usage:
+      hub.py review queue [--runner=night-runner] [--limit=N]
+                                         dirty queue (outcome='queued') 一覧
+      hub.py review log [--limit=N] [--act=ID] [--blueprint=ID] [--runner=R]
+                                         最近の判定ログ
+      hub.py review record-decision --runner={bpf|night-runner}
+                                    [--act=ID] [--blueprint=ID]
+                                    [--type=pre_action|post_complete|stage_gate]
+                                         stdin の JSON (§9.6) を読んで判定・記録
+    """
+    sub = args[0] if args else None
+    if sub == "queue":
+        return _cmd_review_queue(args[1:])
+    if sub == "log":
+        return _cmd_review_log(args[1:])
+    if sub == "record-decision":
+        return _cmd_review_record(args[1:])
+    print("Usage: hub.py review {queue|log|record-decision} [opts]")
+    sys.exit(1)
+
+
+def _cmd_review_queue(args):
+    kv, _ = _parse_kv(args)
+    runner = kv.get("runner", "night-runner")
+    limit = int(kv.get("limit", "50"))
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT id, act_id, blueprint_id, runner, decision_type, trigger, "
+        "mode, score, threshold, outcome, reason, created_at "
+        "FROM review_decisions WHERE outcome='queued' AND runner=? "
+        "ORDER BY created_at DESC LIMIT ?",
+        (runner, limit)
+    ).fetchall()
+    out({"ok": True, "action": "review-queue", "runner": runner,
+         "count": len(rows), "decisions": [dict(r) for r in rows]})
+
+
+def _cmd_review_log(args):
+    kv, _ = _parse_kv(args)
+    limit = int(kv.get("limit", "20"))
+    where, params = [], []
+    if "act" in kv:
+        where.append("act_id=?")
+        params.append(int(kv["act"]))
+    if "blueprint" in kv:
+        where.append("blueprint_id=?")
+        params.append(int(kv["blueprint"]))
+    if "runner" in kv:
+        where.append("runner=?")
+        params.append(kv["runner"])
+    where_sql = (" WHERE " + " AND ".join(where)) if where else ""
+    params.append(limit)
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT id, act_id, blueprint_id, runner, decision_type, trigger, "
+        "mode, score, threshold, asked_human, outcome, reason, created_at "
+        "FROM review_decisions" + where_sql +
+        " ORDER BY created_at DESC LIMIT ?",
+        tuple(params)
+    ).fetchall()
+    out({"ok": True, "action": "review-log",
+         "count": len(rows), "decisions": [dict(r) for r in rows]})
+
+
+def _cmd_review_record(args):
+    kv, _ = _parse_kv(args)
+    runner = kv.get("runner")
+    if runner not in RUNNER_THRESHOLDS:
+        print(f"Error: --runner={{bpf|night-runner}} required (got: {runner!r})")
+        sys.exit(1)
+    act_id = int(kv["act"]) if "act" in kv else None
+    blueprint_id = int(kv["blueprint"]) if "blueprint" in kv else None
+    decision_type = kv.get("type", "pre_action")
+    if decision_type not in DECISION_TYPES:
+        print(f"Error: --type must be one of {sorted(DECISION_TYPES)} "
+              f"(got {decision_type!r})")
+        sys.exit(1)
+
+    raw = sys.stdin.read()
+    try:
+        emit = json.loads(raw)
+    except json.JSONDecodeError as e:
+        print(f"Error: invalid JSON on stdin: {e}")
+        sys.exit(1)
+
+    # §9.6 必須フィールド
+    for field in ("score", "trigger", "mode", "decision", "reason"):
+        if field not in emit:
+            print(f"Error: missing required field '{field}' in emit")
+            sys.exit(1)
+
+    if not isinstance(emit["score"], int) or not (0 <= emit["score"] <= 100):
+        print(f"Error: score must be int 0-100 (got {emit['score']!r})")
+        sys.exit(1)
+    if emit["trigger"] not in TRIGGER_ENUM:
+        print(f"Error: trigger must be one of {sorted(TRIGGER_ENUM)} "
+              f"(got {emit['trigger']!r})")
+        sys.exit(1)
+
+    score = emit["score"]
+    trigger = emit["trigger"]
+    mode = emit.get("mode") or ""
+    reason = emit.get("reason") or ""
+
+    outcome, should_record, asked_human = _decide_outcome(runner, score)
+    threshold = RUNNER_THRESHOLDS[runner]
+
+    conn = get_conn()
+    if should_record:
+        with conn:
+            _record_review_decision(
+                conn, act_id, blueprint_id, runner, decision_type,
+                trigger, mode, score, threshold, asked_human,
+                outcome, reason, raw
+            )
+
+    # night-runner block → Slack alert (§9.7)
+    if runner == "night-runner" and outcome == "blocked":
+        also = emit.get("also_fired") or []
+        also_str = f" also_fired={also}" if also else ""
+        _slack_post(
+            f":octagonal_sign: night-runner block: score={score} "
+            f"trigger={trigger}{also_str} mode={mode} — {reason[:200]}"
+        )
+
+    out({"ok": True, "action": "review-record",
+         "runner": runner, "score": score, "threshold": threshold,
+         "trigger": trigger, "mode": mode, "outcome": outcome,
+         "asked_human": bool(asked_human), "recorded": should_record})
+
+
 def cmd_view(args):
     """Query a VIEW by name.
     Usage: hub.py view <view_name>
@@ -870,6 +1144,7 @@ COMMANDS = {
     "commit":           cmd_commit,
     "push":             cmd_push,
     "stage":            cmd_stage,
+    "review":           cmd_review,
 }
 
 def main():
