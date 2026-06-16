@@ -1,0 +1,15 @@
+{
+    "hooks": {
+        "PostToolUse": [
+            {
+                "matcher": "Edit|Write",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "test -f \"$CLAUDE_PROJECT_DIR/.claude/hooks/lint-blade.php\" && php \"$CLAUDE_PROJECT_DIR/.claude/hooks/lint-blade.php\" || true"
+                    }
+                ]
+            }
+        ]
+    }
+}

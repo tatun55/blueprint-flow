@@ -505,6 +505,11 @@ _create_laravel_project() {
     composer require livewire/livewire --quiet
     log_success "Livewire installed"
 
+    if [[ "$stack" == "tall-pinion" ]]; then
+        composer require sparrowhawk-labs/pinion-ui --quiet
+        log_success "pinion-ui installed"
+    fi
+
     npm install --silent
     npm install -D tailwindcss @tailwindcss/vite daisyui --silent
     log_success "Tailwind + daisyUI installed"
@@ -538,7 +543,13 @@ _create_laravel_project() {
     # Step 4: Configure Tailwind 4 + Vite
     log_info "Step 4: Configuring Tailwind..."
 
-    cat > tailwind.config.js << 'EOF'
+    if [[ "$stack" == "tall-pinion" ]]; then
+        # pinion-ui owns app.css (single preset @import) + app.js (Alpine + focus).
+        # No tailwind.config.js / daisyUI block — the v4 CSS-first preset handles it.
+        php artisan ui:install --no-interaction
+        log_success "pinion-ui ui:install (app.css preset + Alpine wired)"
+    else
+        cat > tailwind.config.js << 'EOF'
 import daisyui from 'daisyui'
 
 /** @type {import('tailwindcss').Config} */
@@ -555,10 +566,12 @@ export default {
 }
 EOF
 
-    cat > resources/css/app.css << 'EOF'
+        cat > resources/css/app.css << 'EOF'
 @import "tailwindcss";
 @config "../../tailwind.config.js";
 EOF
+        log_success "Tailwind + daisyUI configured"
+    fi
 
     cat > vite.config.js << 'EOF'
 import { defineConfig } from 'vite';
@@ -576,6 +589,18 @@ export default defineConfig({
 });
 EOF
     log_success "Tailwind configured"
+
+    # Step 4.5: devlog — local-only browser console + Laravel error capture for AI/CLI.
+    # Single-sourced from the global `devlog` tool (~/claude/scripts/devlog); drops one
+    # local-env provider so `devlog show` can read the browser console out of the box.
+    log_info "Step 4.5: Installing devlog..."
+    if command -v devlog &> /dev/null; then
+        devlog install > /dev/null 2>&1 \
+            && log_success "devlog installed (browser console/errors → storage/logs/dev-browser.log)" \
+            || log_info "devlog install skipped (non-fatal)"
+    else
+        log_info "devlog CLI not found on PATH — skipping (tool: ~/claude/scripts/devlog)"
+    fi
 
     # Step 5: Initialize Git
     log_info "Step 5: Initializing Git..."
